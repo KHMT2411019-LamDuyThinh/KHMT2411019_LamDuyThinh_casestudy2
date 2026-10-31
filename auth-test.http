@@ -1,0 +1,19 @@
+
+### 1. Đăng ký tài khoản
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Nguyen Van A",
+  "email": "test.taskmanager@example.com",
+  "password": "TaskManager123"
+}
+
+### 2. Đăng nhập
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test.taskmanager@example.com",
+  "password": "TaskManager123"
+}

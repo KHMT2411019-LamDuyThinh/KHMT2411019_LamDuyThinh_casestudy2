@@ -4,25 +4,29 @@ import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
     {
-        name: {
+        fullName: {
             type: String,
-            required: [true, 'Name is required'],
-            trim: true,
-            minlength: 2
+            required: true,
+            trim: true
         },
 
         email: {
             type: String,
-            required: [true, 'Email is required'],
+            required: true,
             unique: true,
             lowercase: true,
             trim: true
         },
 
-        password: {
+        passwordHash: {
             type: String,
-            required: [true, 'Password is required'],
-            minlength: 8
+            required: true,
+            select: false
+        },
+
+        avatarUrl: {
+            type: String,
+            default: ''
         }
     },
     {
@@ -32,17 +36,26 @@ const userSchema = new mongoose.Schema(
 
 // Mã hóa mật khẩu trước khi lưu vào MongoDB
 userSchema.pre('save', async function () {
-    if (!this.isModified('password')) {
+    if (!this.isModified('passwordHash')) {
         return;
     }
 
-    this.password = await bcrypt.hash(this.password, 12);
+    this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
 });
 
-// Kiểm tra mật khẩu khi đăng nhập
-userSchema.methods.comparePassword = async function (candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+// Kiểm tra mật khẩu đăng nhập
+userSchema.methods.comparePassword = async function (password) {
+    return await bcrypt.compare(password, this.passwordHash);
 };
+
+// Không trả passwordHash ra dữ liệu JSON
+userSchema.set('toJSON', {
+    transform: function (doc, ret) {
+        delete ret.passwordHash;
+        delete ret.__v;
+        return ret;
+    }
+});
 
 const User = mongoose.model('User', userSchema);
 
