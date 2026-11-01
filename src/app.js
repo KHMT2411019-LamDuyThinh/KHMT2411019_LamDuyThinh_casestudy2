@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 
 import authRoutes from './routes/authRoutes.js';
+import taskRoutes from './routes/taskRoutes.js';
 
 const app = express();
 
@@ -17,8 +18,11 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// API đăng ký và đăng nhập
+// API xác thực tài khoản
 app.use('/api/auth', authRoutes);
+
+// API quản lý và đọc công việc
+app.use('/api/tasks', taskRoutes);
 
 // Xử lý đường dẫn không tồn tại
 app.use((req, res) => {
