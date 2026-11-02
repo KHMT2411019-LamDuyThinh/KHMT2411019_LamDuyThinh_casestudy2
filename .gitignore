@@ -1,4 +1,26 @@
-node_modules/
-.env
+﻿# Environment
+**/.env
+**/node_modules/
+
+# Flutter generated files
+**/.dart_tool/
+**/build/
+
+# Android generated files
+**/.gradle/
+**/.kotlin/
+**/local.properties
+
+# IDE
+.idea/
+.vscode/
+
+# Logs and system files
 npm-debug.log*
 .DS_Store
+
+# Flutter generated metadata
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub/
