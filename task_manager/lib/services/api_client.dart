@@ -50,7 +50,30 @@ class ApiClient {
 
     return _handleResponse(response);
   }
+  // Gửi PUT Request
+  Future<Map<String, dynamic>> put(
+      String endpoint,
+      Map<String, dynamic> body, {
+        bool requireAuth = true,
+      }) async {
+    final token = await getToken();
 
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+
+    if (requireAuth && token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    final response = await _client.put(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+
+    return _handleResponse(response);
+  }
   // Gửi POST Request
   Future<Map<String, dynamic>> post(
       String endpoint,

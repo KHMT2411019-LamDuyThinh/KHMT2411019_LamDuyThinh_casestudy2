@@ -212,3 +212,146 @@ export const getMe = async (req, res) => {
         });
     }
 };
+// API cập nhật thông tin người dùng hiện tại
+export const updateMe = async (req, res) => {
+    try {
+        const { fullName, avatarUrl } = req.body;
+        const updates = {};
+
+        // Kiểm tra và cập nhật họ tên
+        if (fullName !== undefined) {
+            if (typeof fullName !== 'string' || fullName.trim().length < 2) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Full name must contain at least 2 characters'
+                });
+            }
+
+            updates.fullName = fullName.trim();
+        }
+
+        // Cập nhật ảnh đại diện nếu có
+        if (avatarUrl !== undefined) {
+            if (typeof avatarUrl !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Avatar URL is invalid'
+                });
+            }
+
+            updates.avatarUrl = avatarUrl.trim();
+        }
+
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No profile information to update'
+            });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.userId,
+            updates,
+            {
+                new: true,
+                runValidators: true
+            }
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            user: {
+                id: user._id,
+                fullName: user.fullName,
+                email: user.email,
+                avatarUrl: user.avatarUrl
+            }
+        });
+    } catch (error) {
+        console.error('Update profile error:', error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+// API đổi mật khẩu
+export const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (
+            typeof currentPassword !== 'string' ||
+            typeof newPassword !== 'string' ||
+            !currentPassword ||
+            !newPassword
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide current and new password'
+            });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must contain at least 8 characters'
+            });
+        }
+
+        if (currentPassword === newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must be different from current password'
+            });
+        }
+
+        // Lấy cả passwordHash để kiểm tra mật khẩu hiện tại
+        const user = await User.findById(req.userId)
+            .select('+passwordHash');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Xác minh mật khẩu hiện tại
+        const isPasswordValid = await user.comparePassword(currentPassword);
+
+        if (!isPasswordValid) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password is incorrect'
+            });
+        }
+
+        // Gán mật khẩu mới và lưu.
+        // User.js sẽ tự động băm mật khẩu trước khi lưu.
+        user.passwordHash = newPassword;
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Password changed successfully'
+        });
+
+    } catch (error) {
+        console.error('Change password error:', error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};

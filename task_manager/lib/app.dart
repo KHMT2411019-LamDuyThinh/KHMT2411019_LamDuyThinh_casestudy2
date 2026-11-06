@@ -1,10 +1,9 @@
-
 import 'package:flutter/material.dart';
-
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/tasks/task_list_screen.dart';
 import 'screens/tasks/task_detail_screen.dart';
+import 'screens/profile/profile_screen.dart';
 
 class TaskManagerApp extends StatelessWidget {
   const TaskManagerApp({super.key});
@@ -32,6 +31,7 @@ class TaskManagerApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
         '/tasks': (context) => const TaskListScreen(),
+        '/profile': (context) => const ProfileScreen(),
       },
 
       // Xử lý đường dẫn có tham số
