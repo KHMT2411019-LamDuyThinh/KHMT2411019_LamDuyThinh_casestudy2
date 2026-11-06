@@ -8,7 +8,7 @@ class AuthService {
   AuthService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
 
-  // Đăng ký tài khoản
+// Đăng ký tài khoản - không tự lưu JWT Token
   Future<User> register({
     required String fullName,
     required String email,
@@ -23,7 +23,15 @@ class AuthService {
       },
     );
 
-    return _handleAuthResponse(response);
+    final userData = response['user'];
+
+    if (userData is! Map) {
+      throw Exception('Dữ liệu người dùng không hợp lệ');
+    }
+
+    return User.fromJson(
+      Map<String, dynamic>.from(userData),
+    );
   }
 
   // Đăng nhập
