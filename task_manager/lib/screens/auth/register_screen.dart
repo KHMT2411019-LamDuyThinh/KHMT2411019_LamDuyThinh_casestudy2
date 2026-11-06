@@ -33,7 +33,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // Xử lý đăng ký tài khoản
+// Xử lý đăng ký tài khoản
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -52,20 +52,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đăng ký tài khoản thành công!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // AuthService đã lưu JWT Token sau khi đăng ký.
-      // Chuyển đến danh sách công việc.
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/tasks',
-            (route) => false,
-      );
+      // Đăng ký thành công: quay lại màn hình đăng nhập.
+      // true chỉ thông báo đăng ký thành công, không truyền email.
+      Navigator.pop(context, true);
 
     } catch (error) {
       if (!mounted) return;

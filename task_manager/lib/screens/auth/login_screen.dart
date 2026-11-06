@@ -1,6 +1,5 @@
-
 import 'package:flutter/material.dart';
-
+import 'register_screen.dart';
 import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -230,17 +229,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 20),
 
                   // Chuyển sang đăng ký
+// Chuyển sang đăng ký
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Text('Chưa có tài khoản? '),
 
                       TextButton(
-                        onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/register',
+                        onPressed: () async {
+                          final registered = await Navigator.of(context).push<bool>(
+                            MaterialPageRoute<bool>(
+                              builder: (context) => const RegisterScreen(),
+                            ),
                           );
+
+                          if (!mounted) return;
+
+                          if (registered == true) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Đăng ký thành công! Vui lòng đăng nhập.',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
                         },
                         child: const Text('Đăng ký ngay'),
                       ),

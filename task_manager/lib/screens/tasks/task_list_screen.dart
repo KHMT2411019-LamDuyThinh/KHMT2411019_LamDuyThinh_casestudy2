@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-
+import '../../services/auth_service.dart';
 import '../../models/task.dart';
 import '../../services/task_service.dart';
 
@@ -13,6 +13,7 @@ class TaskListScreen extends StatefulWidget {
 
 class _TaskListScreenState extends State<TaskListScreen> {
   final TaskService _taskService = TaskService();
+  final AuthService _authService = AuthService();
 
   List<Task> _tasks = [];
 
@@ -53,7 +54,67 @@ class _TaskListScreenState extends State<TaskListScreen> {
       });
     }
   }
+  // Xử lý đăng xuất
+  Future<void> _logout() async {
+    // Hiển thị hộp thoại xác nhận
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Xác nhận đăng xuất'),
+          content: const Text(
+            'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Hủy'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text(
+                'Đăng xuất',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
 
+    // Người dùng chọn Hủy
+    if (shouldLogout != true) return;
+
+    try {
+      // Xóa JWT Token đã lưu trên thiết bị
+      await _authService.logout();
+
+      if (!mounted) return;
+
+      // Quay về Login và xóa các màn hình trước đó
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/login',
+            (route) => false,
+      );
+
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đăng xuất thất bại: ${error.toString().replaceFirst('Exception: ', '')}',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
   // Chuyển trạng thái sang tiếng Việt
   String _getStatusLabel(String status) {
     switch (status) {
@@ -273,10 +334,27 @@ class _TaskListScreenState extends State<TaskListScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
+          // Nút tải lại danh sách công việc
           IconButton(
             onPressed: _loadTasks,
             icon: const Icon(Icons.refresh),
             tooltip: 'Tải lại',
+          ),
+
+          // Nút mở thông tin cá nhân
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/profile');
+            },
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Thông tin cá nhân',
+          ),
+
+          // Nút đăng xuất
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Đăng xuất',
           ),
         ],
       ),

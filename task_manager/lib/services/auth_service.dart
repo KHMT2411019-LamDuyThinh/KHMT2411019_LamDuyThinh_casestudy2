@@ -8,7 +8,7 @@ class AuthService {
   AuthService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient();
 
-  // Đăng ký tài khoản
+// Đăng ký tài khoản - không tự lưu JWT Token
   Future<User> register({
     required String fullName,
     required String email,
@@ -23,7 +23,15 @@ class AuthService {
       },
     );
 
-    return _handleAuthResponse(response);
+    final userData = response['user'];
+
+    if (userData is! Map) {
+      throw Exception('Dữ liệu người dùng không hợp lệ');
+    }
+
+    return User.fromJson(
+      Map<String, dynamic>.from(userData),
+    );
   }
 
   // Đăng nhập
@@ -79,7 +87,47 @@ class AuthService {
       Map<String, dynamic>.from(userData),
     );
   }
+  // Cập nhật thông tin cá nhân
+  Future<User> updateProfile({
+    required String fullName,
+    String? avatarUrl,
+  }) async {
+    final body = <String, dynamic>{
+      'fullName': fullName.trim(),
+    };
 
+    if (avatarUrl != null) {
+      body['avatarUrl'] = avatarUrl.trim();
+    }
+
+    final response = await _apiClient.put(
+      '/auth/me',
+      body,
+    );
+
+    final userData = response['user'];
+
+    if (userData is! Map) {
+      throw Exception('Dữ liệu người dùng không hợp lệ');
+    }
+
+    return User.fromJson(
+      Map<String, dynamic>.from(userData),
+    );
+  }
+  // Đổi mật khẩu
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _apiClient.put(
+      '/auth/change-password',
+      {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
+    );
+  }
   // Kiểm tra thiết bị đã lưu Token hay chưa
   Future<bool> isLoggedIn() async {
     final token = await _apiClient.getToken();
