@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/task.dart';
 import '../../models/user.dart';
 import '../../services/task_service.dart';
+import 'task_form_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
@@ -59,7 +60,113 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       });
     }
   }
+// Mở màn hình chỉnh sửa công việc
+  Future<void> _editTask() async {
+    if (_task == null) return;
 
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TaskFormScreen(
+          task: _task!,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (updated == true) {
+      await _loadTask();
+    }
+  }
+  // Xóa công việc
+  Future<void> _deleteTask() async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Xác nhận xóa'),
+          content: const Text(
+            'Bạn có chắc chắn muốn xóa công việc này không?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Hủy'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text(
+                'Xóa',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) return;
+
+    try {
+      await _taskService.deleteTask(widget.taskId);
+
+      if (!mounted) return;
+
+      // Quay về danh sách sau khi xóa
+      Navigator.pop(context, true);
+
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.toString().replaceFirst('Exception: ', ''),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  // Cập nhật trạng thái công việc
+  Future<void> _updateStatus(String status) async {
+    try {
+      final updatedTask = await _taskService.updateTaskStatus(
+        id: widget.taskId,
+        status: status,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _task = updatedTask;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cập nhật trạng thái thành công!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.toString().replaceFirst('Exception: ', ''),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
   // Chuyển trạng thái sang tiếng Việt
   String _getStatusLabel(String status) {
     switch (status) {
@@ -258,6 +365,48 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+
+// Thay đổi trạng thái công việc
+          const Text(
+            'Cập nhật trạng thái',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          DropdownButtonFormField<String>(
+            key: ValueKey(task.status),
+            initialValue: task.status,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.flag_outlined),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'todo',
+                child: Text('Chưa thực hiện'),
+              ),
+              DropdownMenuItem(
+                value: 'in_progress',
+                child: Text('Đang thực hiện'),
+              ),
+              DropdownMenuItem(
+                value: 'completed',
+                child: Text('Đã hoàn thành'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null && value != task.status) {
+                _updateStatus(value);
+              }
+            },
+          ),
 
           const SizedBox(height: 24),
 
@@ -347,10 +496,25 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
+          // Tải lại chi tiết
           IconButton(
             onPressed: _loadTask,
             icon: const Icon(Icons.refresh),
             tooltip: 'Tải lại',
+          ),
+
+          // Chỉnh sửa công việc
+          IconButton(
+            onPressed: _task == null ? null : _editTask,
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Chỉnh sửa',
+          ),
+
+          // Xóa công việc
+          IconButton(
+            onPressed: _task == null ? null : _deleteTask,
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Xóa công việc',
           ),
         ],
       ),

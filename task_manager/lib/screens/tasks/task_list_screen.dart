@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/task.dart';
 import '../../services/task_service.dart';
+import 'task_form_screen.dart';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -20,10 +21,29 @@ class _TaskListScreenState extends State<TaskListScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+// Tìm kiếm công việc
+  final TextEditingController _searchController =
+  TextEditingController();
+
+// Bộ lọc trạng thái
+  String _selectedStatus = '';
+
+// Bộ lọc mức ưu tiên
+  String _selectedPriority = '';
+
+// Sắp xếp
+  String _sortBy = 'createdAt';
+  String _sortOrder = 'desc';
+
   @override
   void initState() {
     super.initState();
     _loadTasks();
+  }
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   // Tải danh sách công việc từ Backend
@@ -34,7 +54,17 @@ class _TaskListScreenState extends State<TaskListScreen> {
     });
 
     try {
-      final tasks = await _taskService.getTasks();
+      final tasks = await _taskService.getTasks(
+        status: _selectedStatus.isEmpty
+            ? null
+            : _selectedStatus,
+        priority: _selectedPriority.isEmpty
+            ? null
+            : _selectedPriority,
+        search: _searchController.text,
+        sortBy: _sortBy,
+        sortOrder: _sortOrder,
+      );
 
       if (!mounted) return;
 
@@ -52,6 +82,244 @@ class _TaskListScreenState extends State<TaskListScreen> {
         );
         _isLoading = false;
       });
+    }
+  }
+// Xóa toàn bộ điều kiện tìm kiếm và lọc
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _selectedStatus = '';
+      _selectedPriority = '';
+      _sortBy = 'createdAt';
+      _sortOrder = 'desc';
+    });
+
+    _loadTasks();
+  }
+
+// Giao diện tìm kiếm, lọc và sắp xếp
+  Widget _buildSearchAndFilters() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Tìm kiếm
+          TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => _loadTasks(),
+            decoration: InputDecoration(
+              hintText: 'Tìm kiếm công việc...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: IconButton(
+                onPressed: () {
+                  _searchController.clear();
+                  _loadTasks();
+                },
+                icon: const Icon(Icons.close),
+                tooltip: 'Xóa nội dung tìm kiếm',
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Lọc trạng thái và mức ưu tiên
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedStatus,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Trạng thái',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: '',
+                      child: Text('Tất cả'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'todo',
+                      child: Text('Chưa thực hiện'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'in_progress',
+                      child: Text('Đang thực hiện'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'completed',
+                      child: Text('Hoàn thành'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+
+                    setState(() {
+                      _selectedStatus = value;
+                    });
+                  },
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedPriority,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Ưu tiên',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: '',
+                      child: Text('Tất cả'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'low',
+                      child: Text('Thấp'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'medium',
+                      child: Text('Trung bình'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'high',
+                      child: Text('Cao'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+
+                    setState(() {
+                      _selectedPriority = value;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Sắp xếp
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _sortBy,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Sắp xếp theo',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'createdAt',
+                      child: Text('Ngày tạo'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'updatedAt',
+                      child: Text('Ngày cập nhật'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'title',
+                      child: Text('Tên công việc'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'startDate',
+                      child: Text('Ngày bắt đầu'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'dueDate',
+                      child: Text('Hạn hoàn thành'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'priority',
+                      child: Text('Mức ưu tiên'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'status',
+                      child: Text('Trạng thái'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+
+                    setState(() {
+                      _sortBy = value;
+                    });
+                  },
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _sortOrder =
+                    _sortOrder == 'asc' ? 'desc' : 'asc';
+                  });
+
+                  _loadTasks();
+                },
+                icon: Icon(
+                  _sortOrder == 'asc'
+                      ? Icons.arrow_upward
+                      : Icons.arrow_downward,
+                ),
+                tooltip: _sortOrder == 'asc'
+                    ? 'Tăng dần'
+                    : 'Giảm dần',
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Nút áp dụng và xóa bộ lọc
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: _clearFilters,
+                child: const Text('Xóa bộ lọc'),
+              ),
+
+              const SizedBox(width: 8),
+
+              ElevatedButton.icon(
+                onPressed: _loadTasks,
+                icon: const Icon(Icons.filter_alt),
+                label: const Text('Áp dụng'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  // Mở màn hình tạo công việc mới
+  Future<void> _openCreateTask() async {
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const TaskFormScreen(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (created == true) {
+      await _loadTasks();
     }
   }
   // Xử lý đăng xuất
@@ -254,12 +522,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
           color: Colors.grey,
         ),
 
-        onTap: () {
-          Navigator.pushNamed(
+        onTap: () async {
+          await Navigator.pushNamed(
             context,
             '/task-detail',
             arguments: task.id,
           );
+
+          if (!mounted) return;
+
+          await _loadTasks();
         },
       ),
     );
@@ -358,69 +630,88 @@ class _TaskListScreenState extends State<TaskListScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openCreateTask,
+        icon: const Icon(Icons.add),
+        label: const Text('Tạo công việc'),
+      ),
 
-      body: _isLoading
-          ? const Center(
-        child: CircularProgressIndicator(),
-      )
-          : _errorMessage != null
-          ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 60,
-                color: Colors.red,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Không thể tải công việc',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      body: Column(
+        children: [
+          // Khu vực tìm kiếm và lọc
+          _buildSearchAndFilters(),
+
+          // Khu vực hiển thị danh sách
+          Expanded(
+            child: _isLoading
+                ? const Center(
+              child: CircularProgressIndicator(),
+            )
+                : _errorMessage != null
+                ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 60,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Không thể tải công việc',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _loadTasks,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Thử lại'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
+            )
+                : RefreshIndicator(
+              onRefresh: _loadTasks,
+              child: _tasks.isEmpty
+                  ? ListView(
+                physics:
+                const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context)
+                        .size
+                        .height *
+                        0.55,
+                    child: _buildEmptyView(),
+                  ),
+                ],
+              )
+                  : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                physics:
+                const AlwaysScrollableScrollPhysics(),
+                itemCount: _tasks.length,
+                itemBuilder: (context, index) {
+                  return _buildTaskCard(
+                    _tasks[index],
+                  );
+                },
               ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _loadTasks,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Thử lại'),
-              ),
-            ],
-          ),
-        ),
-      )
-          : RefreshIndicator(
-        onRefresh: _loadTasks,
-        child: _tasks.isEmpty
-            ? ListView(
-          physics:
-          const AlwaysScrollableScrollPhysics(),
-          children: [
-            SizedBox(
-              height:
-              MediaQuery.of(context).size.height * 0.65,
-              child: _buildEmptyView(),
             ),
-          ],
-        )
-            : ListView.builder(
-          padding: const EdgeInsets.all(16),
-          physics:
-          const AlwaysScrollableScrollPhysics(),
-          itemCount: _tasks.length,
-          itemBuilder: (context, index) {
-            return _buildTaskCard(_tasks[index]);
-          },
-        ),
+          ),
+        ],
       ),
     );
   }

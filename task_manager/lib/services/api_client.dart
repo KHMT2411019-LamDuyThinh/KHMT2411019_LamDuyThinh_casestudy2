@@ -74,6 +74,54 @@ class ApiClient {
 
     return _handleResponse(response);
   }
+
+  // Gửi PATCH Request
+  Future<Map<String, dynamic>> patch(
+      String endpoint,
+      Map<String, dynamic> body, {
+        bool requireAuth = true,
+      }) async {
+    final token = await getToken();
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+
+    if (requireAuth && token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    final response = await _client.patch(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+
+    return _handleResponse(response);
+  }
+
+  // Gửi DELETE Request
+  Future<Map<String, dynamic>> delete(
+      String endpoint, {
+        bool requireAuth = true,
+      }) async {
+    final token = await getToken();
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+
+    if (requireAuth && token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    final response = await _client.delete(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: headers,
+    );
+
+    return _handleResponse(response);
+  }
   // Gửi POST Request
   Future<Map<String, dynamic>> post(
       String endpoint,
