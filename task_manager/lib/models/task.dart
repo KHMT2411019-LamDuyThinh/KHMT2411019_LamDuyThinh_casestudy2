@@ -12,6 +12,7 @@ class Task {
   final DateTime? dueDate;
   final String priority;
   final String status;
+  final String? accessRole;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -26,6 +27,7 @@ class Task {
     this.dueDate,
     this.priority = 'medium',
     this.status = 'todo',
+    this.accessRole,
     this.createdAt,
     this.updatedAt,
   });
@@ -78,6 +80,7 @@ class Task {
           : null,
       priority: json['priority'] ?? 'medium',
       status: json['status'] ?? 'todo',
+      accessRole: json['accessRole']?.toString(),
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,

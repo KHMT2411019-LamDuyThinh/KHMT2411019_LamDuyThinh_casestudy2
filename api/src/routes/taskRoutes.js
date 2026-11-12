@@ -10,9 +10,53 @@ import {
     updateTaskStatus
 } from '../controllers/taskController.js';
 
+import {
+    searchMembers,
+    assignTask,
+    createTaskShare,
+    getTaskShares,
+    updateTaskShare,
+    deleteTaskShare
+} from '../controllers/taskCollaborationController.js';
+
 import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// ==========================================
+// NHÓM C: PHÂN CÔNG VÀ CHIA SẺ CÔNG VIỆC
+// ==========================================
+
+// Tìm kiếm thành viên
+// Phải đặt trước router GET '/:id'
+router.get('/members', authMiddleware, searchMembers);
+
+// Phân công thành viên cho công việc
+router.put('/:id/assignees', authMiddleware, assignTask);
+
+// Chia sẻ công việc
+router.post('/:id/shares', authMiddleware, createTaskShare);
+
+// Lấy danh sách người được chia sẻ
+router.get('/:id/shares', authMiddleware, getTaskShares);
+
+// Thay đổi quyền chia sẻ
+router.patch(
+    '/:id/shares/:userId',
+    authMiddleware,
+    updateTaskShare
+);
+
+// Thu hồi quyền chia sẻ
+router.delete(
+    '/:id/shares/:userId',
+    authMiddleware,
+    deleteTaskShare
+);
+
+// ==========================================
+// NHÓM B: QUẢN LÝ CÔNG VIỆC
+// ==========================================
 
 // Lấy danh sách công việc
 // Hỗ trợ tìm kiếm, lọc và sắp xếp
