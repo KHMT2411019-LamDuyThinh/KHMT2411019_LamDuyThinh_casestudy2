@@ -1,23 +1,62 @@
 
 import mongoose from 'mongoose';
 import Task from '../models/Task.js';
+import TaskShare from '../models/TaskShare.js';
+
+// Xác định vai trò của người dùng đối với một công việc
+const getTaskRole = async (task, userId) => {
+    // Người tạo công việc
+    if (String(task.createdBy) === String(userId)) {
+        return 'owner';
+    }
+
+    // Người được giao công việc
+    const isAssignee = task.assigneeIds.some(
+        id => String(id) === String(userId)
+    );
+
+    if (isAssignee) {
+        return 'assignee';
+    }
+
+    // Người được chia sẻ công việc
+    const share = await TaskShare.findOne({
+        taskId: task._id,
+        userId
+    }).select('role');
+
+    if (share) {
+        return share.role;
+    }
+
+    // Không có quyền truy cập
+    return null;
+};
 
 // Lấy danh sách công việc
 
 // Lấy danh sách công việc, tìm kiếm, lọc và sắp xếp
 export const getTasks = async (req, res) => {
     try {
-        const userId = req.userId;
 
-        // Chỉ lấy công việc do mình tạo hoặc được giao
-        const conditions = [
-            {
-                $or: [
-                    { createdBy: userId },
-                    { assigneeIds: userId }
-                ]
-            }
-        ];
+const userId = req.userId;
+
+// Lấy danh sách ID công việc được chia sẻ cho người dùng
+const sharedTaskIds = await TaskShare.distinct(
+    'taskId',
+    { userId }
+);
+
+// Lấy công việc do mình tạo, được giao hoặc được chia sẻ
+const conditions = [
+    {
+        $or: [
+            { createdBy: userId },
+            { assigneeIds: userId },
+            { _id: { $in: sharedTaskIds } }
+        ]
+    }
+];
 
         // Tìm kiếm theo tiêu đề hoặc mô tả
         const search = req.query.search;
@@ -214,29 +253,36 @@ export const getTaskById = async (req, res) => {
             });
         }
 
-        const task = await Task.findOne({
-            _id: taskId,
-            $or: [
-                { createdBy: userId },
-                { assigneeIds: userId }
-            ]
-        })
-            .populate('createdBy', 'fullName email avatarUrl')
-            .populate('assigneeIds', 'fullName email avatarUrl')
-            .populate('primaryAssigneeId', 'fullName email avatarUrl');
+const task = await Task.findById(taskId);
 
-        if (!task) {
-            return res.status(404).json({
-                success: false,
-                message: 'Task not found or access denied'
-            });
-        }
+if (!task) {
+    return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+    });
+}
 
-        return res.status(200).json({
-            success: true,
-            message: 'Get task successfully',
-            task
-        });
+// Xác định quyền truy cập
+const role = await getTaskRole(task, userId);
+
+if (!role) {
+    return res.status(404).json({
+        success: false,
+        message: 'Task not found or access denied'
+    });
+}
+
+// Lấy thông tin người liên quan
+await task.populate('createdBy', 'fullName email avatarUrl');
+await task.populate('assigneeIds', 'fullName email avatarUrl');
+await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
+
+return res.status(200).json({
+    success: true,
+    message: 'Get task successfully',
+    task,
+    accessRole: role
+});
 
     } catch (error) {
         console.error('Get task detail error:', error.message);
@@ -364,18 +410,26 @@ export const updateTask = async (req, res) => {
             });
         }
 
-        // Chỉ người tạo công việc được chỉnh sửa ở giai đoạn này
-        const task = await Task.findOne({
-            _id: taskId,
-            createdBy: req.userId
-        });
+// Owner và Editor được phép chỉnh sửa thông tin công việc
+// Tìm công việc
+const task = await Task.findById(taskId);
 
-        if (!task) {
-            return res.status(404).json({
-                success: false,
-                message: 'Task not found or access denied'
-            });
-        }
+if (!task) {
+    return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+    });
+}
+
+// Kiểm tra quyền chỉnh sửa
+const role = await getTaskRole(task, req.userId);
+
+if (!['owner', 'editor'].includes(role)) {
+    return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to edit this task'
+    });
+}
 
         const {
             title,
@@ -481,11 +535,12 @@ export const updateTask = async (req, res) => {
         await task.populate('assigneeIds', 'fullName email avatarUrl');
         await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
 
-        return res.status(200).json({
-            success: true,
-            message: 'Task updated successfully',
-            task
-        });
+return res.status(200).json({
+    success: true,
+    message: 'Task updated successfully',
+    task,
+    accessRole: role
+});
 
     } catch (error) {
         console.error('Update task error:', error.message);
@@ -523,8 +578,13 @@ export const deleteTask = async (req, res) => {
             });
         }
 
-        // Xóa công việc
-        await task.deleteOne();
+// Xóa công việc
+await task.deleteOne();
+
+// Xóa toàn bộ quyền chia sẻ liên quan
+await TaskShare.deleteMany({
+    taskId: task._id
+});
 
         return res.status(200).json({
             success: true,
@@ -572,21 +632,25 @@ export const updateTaskStatus = async (req, res) => {
             });
         }
 
-        // Người tạo hoặc người được giao có thể cập nhật trạng thái
-        const task = await Task.findOne({
-            _id: taskId,
-            $or: [
-                { createdBy: req.userId },
-                { assigneeIds: req.userId }
-            ]
-        });
+// Tìm công việc
+const task = await Task.findById(taskId);
 
-        if (!task) {
-            return res.status(404).json({
-                success: false,
-                message: 'Task not found or access denied'
-            });
-        }
+if (!task) {
+    return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+    });
+}
+
+// Kiểm tra quyền cập nhật trạng thái
+const role = await getTaskRole(task, req.userId);
+
+if (!['owner', 'assignee', 'editor'].includes(role)) {
+    return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to update task status'
+    });
+}
 
         // Cập nhật trạng thái
         task.status = status;
@@ -597,11 +661,12 @@ export const updateTaskStatus = async (req, res) => {
         await task.populate('assigneeIds', 'fullName email avatarUrl');
         await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
 
-        return res.status(200).json({
-            success: true,
-            message: 'Task status updated successfully',
-            task
-        });
+return res.status(200).json({
+    success: true,
+    message: 'Task status updated successfully',
+    task,
+    accessRole: role
+});
 
     } catch (error) {
         console.error('Update task status error:', error.message);

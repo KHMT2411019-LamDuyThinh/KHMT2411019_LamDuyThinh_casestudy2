@@ -5,6 +5,7 @@ import '../../models/task.dart';
 import '../../models/user.dart';
 import '../../services/task_service.dart';
 import 'task_form_screen.dart';
+import 'task_collaboration_screen.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
@@ -25,6 +26,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   bool _isLoading = true;
   String? _errorMessage;
+  // Kiểm tra quyền của người dùng hiện tại.
+  bool get _isOwner => _task?.accessRole == 'owner';
+
+  bool get _canEdit =>
+      _isOwner || _task?.accessRole == 'editor';
+
+  bool get _canUpdateStatus =>
+      _canEdit || _task?.accessRole == 'assignee';
 
   @override
   void initState() {
@@ -78,6 +87,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (updated == true) {
       await _loadTask();
     }
+  }
+  // Mở màn hình phân công và chia sẻ công việc.
+  Future<void> _openCollaboration() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TaskCollaborationScreen(
+          taskId: widget.taskId,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await _loadTask();
   }
   // Xóa công việc
   Future<void> _deleteTask() async {
@@ -367,48 +391,50 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-// Thay đổi trạng thái công việc
-          const Text(
-            'Cập nhật trạng thái',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          DropdownButtonFormField<String>(
-            key: ValueKey(task.status),
-            initialValue: task.status,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.flag_outlined),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+// Chỉ Owner, Assignee và Editor được cập nhật trạng thái.
+          if (_canUpdateStatus) ...[
+            const Text(
+              'Cập nhật trạng thái',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
               ),
             ),
-            items: const [
-              DropdownMenuItem(
-                value: 'todo',
-                child: Text('Chưa thực hiện'),
-              ),
-              DropdownMenuItem(
-                value: 'in_progress',
-                child: Text('Đang thực hiện'),
-              ),
-              DropdownMenuItem(
-                value: 'completed',
-                child: Text('Đã hoàn thành'),
-              ),
-            ],
-            onChanged: (value) {
-              if (value != null && value != task.status) {
-                _updateStatus(value);
-              }
-            },
-          ),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 8),
+
+            DropdownButtonFormField<String>(
+              key: ValueKey(task.status),
+              initialValue: task.status,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.flag_outlined),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'todo',
+                  child: Text('Chưa thực hiện'),
+                ),
+                DropdownMenuItem(
+                  value: 'in_progress',
+                  child: Text('Đang thực hiện'),
+                ),
+                DropdownMenuItem(
+                  value: 'completed',
+                  child: Text('Đã hoàn thành'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null && value != task.status) {
+                  _updateStatus(value);
+                }
+              },
+            ),
+
+            const SizedBox(height: 24),
+          ],
 
           // Mô tả
           const Text(
@@ -496,26 +522,36 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         foregroundColor: Colors.black,
         elevation: 0,
         actions: [
-          // Tải lại chi tiết
+          // Tải lại chi tiết - tất cả vai trò.
           IconButton(
             onPressed: _loadTask,
             icon: const Icon(Icons.refresh),
             tooltip: 'Tải lại',
           ),
 
-          // Chỉnh sửa công việc
-          IconButton(
-            onPressed: _task == null ? null : _editTask,
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Chỉnh sửa',
-          ),
+          // Phân công và chia sẻ - chỉ Owner.
+          if (_isOwner)
+            IconButton(
+              onPressed: _openCollaboration,
+              icon: const Icon(Icons.groups_outlined),
+              tooltip: 'Phân công và chia sẻ',
+            ),
 
-          // Xóa công việc
-          IconButton(
-            onPressed: _task == null ? null : _deleteTask,
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Xóa công việc',
-          ),
+          // Chỉnh sửa - Owner và Editor.
+          if (_canEdit)
+            IconButton(
+              onPressed: _editTask,
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Chỉnh sửa',
+            ),
+
+          // Xóa - chỉ Owner.
+          if (_isOwner)
+            IconButton(
+              onPressed: _deleteTask,
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Xóa công việc',
+            ),
         ],
       ),
       body: _isLoading
