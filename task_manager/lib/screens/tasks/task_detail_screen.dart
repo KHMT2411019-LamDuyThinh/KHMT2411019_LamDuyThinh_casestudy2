@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../models/task.dart';
@@ -10,10 +9,7 @@ import 'task_collaboration_screen.dart';
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
 
-  const TaskDetailScreen({
-    super.key,
-    required this.taskId,
-  });
+  const TaskDetailScreen({super.key, required this.taskId});
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -29,11 +25,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   // Kiểm tra quyền của người dùng hiện tại.
   bool get _isOwner => _task?.accessRole == 'owner';
 
-  bool get _canEdit =>
-      _isOwner || _task?.accessRole == 'editor';
+  bool get _canEdit => _isOwner || _task?.accessRole == 'editor';
 
-  bool get _canUpdateStatus =>
-      _canEdit || _task?.accessRole == 'assignee';
+  bool get _canUpdateStatus => _canEdit || _task?.accessRole == 'assignee';
 
   @override
   void initState() {
@@ -61,25 +55,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = error.toString().replaceFirst(
-          'Exception: ',
-          '',
-        );
+        _errorMessage = error.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }
   }
-// Mở màn hình chỉnh sửa công việc
+
+  // Mở màn hình chỉnh sửa công việc
   Future<void> _editTask() async {
     if (_task == null) return;
 
     final updated = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (context) => TaskFormScreen(
-          task: _task!,
-        ),
-      ),
+      MaterialPageRoute(builder: (context) => TaskFormScreen(task: _task!)),
     );
 
     if (!mounted) return;
@@ -88,14 +76,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       await _loadTask();
     }
   }
+
   // Mở màn hình phân công và chia sẻ công việc.
   Future<void> _openCollaboration() async {
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (context) => TaskCollaborationScreen(
-          taskId: widget.taskId,
-        ),
+        builder: (context) => TaskCollaborationScreen(taskId: widget.taskId),
       ),
     );
 
@@ -103,6 +90,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
     await _loadTask();
   }
+
   // Xóa công việc
   Future<void> _deleteTask() async {
     final shouldDelete = await showDialog<bool>(
@@ -110,9 +98,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Xác nhận xóa'),
-          content: const Text(
-            'Bạn có chắc chắn muốn xóa công việc này không?',
-          ),
+          content: const Text('Bạn có chắc chắn muốn xóa công việc này không?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -124,10 +110,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-              child: const Text(
-                'Xóa',
-                style: TextStyle(color: Colors.red),
-              ),
+              child: const Text('Xóa', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -143,20 +126,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
       // Quay về danh sách sau khi xóa
       Navigator.pop(context, true);
-
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            error.toString().replaceFirst('Exception: ', ''),
-          ),
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
+
   // Cập nhật trạng thái công việc
   Future<void> _updateStatus(String status) async {
     try {
@@ -177,20 +158,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           backgroundColor: Colors.green,
         ),
       );
-
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            error.toString().replaceFirst('Exception: ', ''),
-          ),
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
+
   // Chuyển trạng thái sang tiếng Việt
   String _getStatusLabel(String status) {
     switch (status) {
@@ -260,11 +239,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            size: 21,
-            color: Colors.blueGrey,
-          ),
+          Icon(icon, size: 21, color: Colors.blueGrey),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -272,10 +247,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 13,
-                  ),
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -310,28 +282,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         children: [
           const Row(
             children: [
-              Icon(
-                Icons.people_outline,
-                color: Colors.blueGrey,
-                size: 21,
-              ),
+              Icon(Icons.people_outline, color: Colors.blueGrey, size: 21),
               SizedBox(width: 12),
               Text(
                 'Người được giao',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 10),
           ...users.map(
-                (user) => Padding(
-              padding: const EdgeInsets.only(
-                left: 32,
-                bottom: 8,
-              ),
+            (user) => Padding(
+              padding: const EdgeInsets.only(left: 32, bottom: 8),
               child: Row(
                 children: [
                   const Icon(
@@ -340,9 +302,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     color: Colors.blue,
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(_getUserName(user)),
-                  ),
+                  Expanded(child: Text(_getUserName(user))),
                 ],
               ),
             ),
@@ -362,10 +322,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           // Tên công việc
           Text(
             task.title,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 16),
@@ -381,9 +338,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 side: BorderSide.none,
               ),
               Chip(
-                label: Text(
-                  'Ưu tiên: ${_getPriorityLabel(task.priority)}',
-                ),
+                label: Text('Ưu tiên: ${_getPriorityLabel(task.priority)}'),
                 backgroundColor: Colors.orange.shade50,
                 side: BorderSide.none,
               ),
@@ -391,14 +346,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-// Chỉ Owner, Assignee và Editor được cập nhật trạng thái.
+          // Chỉ Owner, Assignee và Editor được cập nhật trạng thái.
           if (_canUpdateStatus) ...[
             const Text(
               'Cập nhật trạng thái',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
             ),
 
             const SizedBox(height: 8),
@@ -413,10 +365,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
               items: const [
-                DropdownMenuItem(
-                  value: 'todo',
-                  child: Text('Chưa thực hiện'),
-                ),
+                DropdownMenuItem(value: 'todo', child: Text('Chưa thực hiện')),
                 DropdownMenuItem(
                   value: 'in_progress',
                   child: Text('Đang thực hiện'),
@@ -439,10 +388,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           // Mô tả
           const Text(
             'Mô tả công việc',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
@@ -451,10 +397,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             task.description.isEmpty
                 ? 'Chưa có mô tả cho công việc này.'
                 : task.description,
-            style: const TextStyle(
-              fontSize: 15,
-              height: 1.5,
-            ),
+            style: const TextStyle(fontSize: 15, height: 1.5),
           ),
 
           const SizedBox(height: 24),
@@ -462,10 +405,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           // Thông tin công việc
           const Text(
             'Thông tin chi tiết',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 10),
@@ -528,6 +468,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Tải lại',
           ),
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                '/task-activities',
+                arguments: widget.taskId,
+              );
+            },
+            icon: const Icon(Icons.history),
+            tooltip: 'Lịch sử hoạt động',
+          ),
 
           // Phân công và chia sẻ - chỉ Owner.
           if (_isOwner)
@@ -555,50 +506,43 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-        child: CircularProgressIndicator(),
-      )
+          ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
           ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 60,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Không thể tải chi tiết công việc',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 60,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Không thể tải chi tiết công việc',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(_errorMessage!, textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _loadTask,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Thử lại'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _loadTask,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Thử lại'),
-              ),
-            ],
-          ),
-        ),
-      )
+            )
           : _task != null
           ? _buildTaskContent(_task!)
-          : const Center(
-        child: Text('Không tìm thấy công việc'),
-      ),
+          : const Center(child: Text('Không tìm thấy công việc')),
     );
   }
 }

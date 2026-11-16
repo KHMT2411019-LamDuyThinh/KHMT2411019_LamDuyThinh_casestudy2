@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -20,8 +19,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   final AuthService _authService = AuthService();
 
   // Quản lý thông báo
-  final NotificationService _notificationService =
-  NotificationService();
+  final NotificationService _notificationService = NotificationService();
 
   int _unreadCount = 0;
 
@@ -31,8 +29,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   String? _errorMessage;
 
   // Tìm kiếm công việc
-  final TextEditingController _searchController =
-  TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   // Bộ lọc trạng thái
   String _selectedStatus = '';
@@ -82,12 +79,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     try {
       final tasks = await _taskService.getTasks(
-        status: _selectedStatus.isEmpty
-            ? null
-            : _selectedStatus,
-        priority: _selectedPriority.isEmpty
-            ? null
-            : _selectedPriority,
+        status: _selectedStatus.isEmpty ? null : _selectedStatus,
+        priority: _selectedPriority.isEmpty ? null : _selectedPriority,
         search: _searchController.text,
         sortBy: _sortBy,
         sortOrder: _sortOrder,
@@ -103,10 +96,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = error.toString().replaceFirst(
-          'Exception: ',
-          '',
-        );
+        _errorMessage = error.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -168,10 +158,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     border: OutlineInputBorder(),
                   ),
                   items: const [
-                    DropdownMenuItem(
-                      value: '',
-                      child: Text('Tất cả'),
-                    ),
+                    DropdownMenuItem(value: '', child: Text('Tất cả')),
                     DropdownMenuItem(
                       value: 'todo',
                       child: Text('Chưa thực hiện'),
@@ -206,22 +193,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
                     border: OutlineInputBorder(),
                   ),
                   items: const [
-                    DropdownMenuItem(
-                      value: '',
-                      child: Text('Tất cả'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'low',
-                      child: Text('Thấp'),
-                    ),
+                    DropdownMenuItem(value: '', child: Text('Tất cả')),
+                    DropdownMenuItem(value: 'low', child: Text('Thấp')),
                     DropdownMenuItem(
                       value: 'medium',
                       child: Text('Trung bình'),
                     ),
-                    DropdownMenuItem(
-                      value: 'high',
-                      child: Text('Cao'),
-                    ),
+                    DropdownMenuItem(value: 'high', child: Text('Cao')),
                   ],
                   onChanged: (value) {
                     if (value == null) return;
@@ -293,8 +271,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
               IconButton(
                 onPressed: () {
                   setState(() {
-                    _sortOrder =
-                    _sortOrder == 'asc' ? 'desc' : 'asc';
+                    _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc';
                   });
 
                   _loadTasks();
@@ -304,9 +281,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       ? Icons.arrow_upward
                       : Icons.arrow_downward,
                 ),
-                tooltip: _sortOrder == 'asc'
-                    ? 'Tăng dần'
-                    : 'Giảm dần',
+                tooltip: _sortOrder == 'asc' ? 'Tăng dần' : 'Giảm dần',
               ),
             ],
           ),
@@ -340,9 +315,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   Future<void> _openCreateTask() async {
     final created = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (context) => const TaskFormScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const TaskFormScreen()),
     );
 
     if (!mounted) return;
@@ -390,11 +363,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
       if (!mounted) return;
 
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/login',
-            (route) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     } catch (error) {
       if (!mounted) return;
 
@@ -473,19 +442,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
       elevation: 1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Colors.grey.shade200,
-        ),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
 
         title: Text(
           task.title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
 
         subtitle: Padding(
@@ -513,9 +477,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
                   _buildInfoChip(
                     label: 'Ưu tiên: ${_getPriorityLabel(task.priority)}',
-                    color: task.priority == 'high'
-                        ? Colors.red
-                        : Colors.grey,
+                    color: task.priority == 'high' ? Colors.red : Colors.grey,
                   ),
                 ],
               ),
@@ -532,10 +494,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   const SizedBox(width: 6),
                   Text(
                     'Hạn: ${_formatDate(task.dueDate)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
               ),
@@ -543,10 +502,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           ),
         ),
 
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: Colors.grey,
-        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
 
         onTap: () async {
           await Navigator.pushNamed(
@@ -564,15 +520,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   // Tạo nhãn thông tin
-  Widget _buildInfoChip({
-    required String label,
-    required Color color,
-  }) {
+  Widget _buildInfoChip({required String label, required Color color}) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
@@ -602,10 +552,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           const SizedBox(height: 16),
           const Text(
             'Chưa có công việc nào',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -656,9 +603,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
             },
             icon: Badge(
               isLabelVisible: _unreadCount > 0,
-              label: Text(
-                _unreadCount > 99 ? '99+' : '$_unreadCount',
-              ),
+              label: Text(_unreadCount > 99 ? '99+' : '$_unreadCount'),
               child: const Icon(Icons.notifications_none),
             ),
             tooltip: 'Thông báo',
@@ -690,78 +635,82 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
       body: Column(
         children: [
+          // Nút mở thống kê Group E
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/statistics');
+                },
+                icon: const Icon(Icons.bar_chart),
+                label: const Text('Thống kê công việc'),
+              ),
+            ),
+          ),
+
           // Khu vực tìm kiếm và lọc
           _buildSearchAndFilters(),
 
           // Khu vực hiển thị danh sách
           Expanded(
             child: _isLoading
-                ? const Center(
-              child: CircularProgressIndicator(),
-            )
+                ? const Center(child: CircularProgressIndicator())
                 : _errorMessage != null
                 ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 60,
-                      color: Colors.red,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Không thể tải công việc',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 60,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Không thể tải công việc',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(_errorMessage!, textAlign: TextAlign.center),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _loadTasks,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Thử lại'),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: _loadTasks,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Thử lại'),
-                    ),
-                  ],
-                ),
-              ),
-            )
+                  )
                 : RefreshIndicator(
-              onRefresh: _loadTasks,
-              child: _tasks.isEmpty
-                  ? ListView(
-                physics:
-                const AlwaysScrollableScrollPhysics(),
-                children: [
-                  SizedBox(
-                    height: MediaQuery.of(context)
-                        .size
-                        .height *
-                        0.55,
-                    child: _buildEmptyView(),
+                    onRefresh: _loadTasks,
+                    child: _tasks.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height:
+                                    MediaQuery.of(context).size.height * 0.55,
+                                child: _buildEmptyView(),
+                              ),
+                            ],
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: _tasks.length,
+                            itemBuilder: (context, index) {
+                              return _buildTaskCard(_tasks[index]);
+                            },
+                          ),
                   ),
-                ],
-              )
-                  : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                physics:
-                const AlwaysScrollableScrollPhysics(),
-                itemCount: _tasks.length,
-                itemBuilder: (context, index) {
-                  return _buildTaskCard(
-                    _tasks[index],
-                  );
-                },
-              ),
-            ),
           ),
         ],
       ),
