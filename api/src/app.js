@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import emailLogRoutes from './routes/emailLogRoutes.js';
 
 const app = express();
 
@@ -34,6 +35,13 @@ app.use('/api/auth', authRoutes);
 // ==========================================
 
 app.use('/api/users', userRoutes);
+
+// ==========================================
+// NHÓM D: LỊCH SỬ EMAIL VÀ THỬ GỬI LẠI
+// Phải đăng ký trước taskRoutes
+// ==========================================
+
+app.use('/api', emailLogRoutes);
 
 // ==========================================
 // NHÓM B VÀ C: QUẢN LÝ CÔNG VIỆC

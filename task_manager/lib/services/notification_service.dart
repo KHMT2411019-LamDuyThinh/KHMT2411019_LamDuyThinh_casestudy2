@@ -52,6 +52,26 @@ class NotificationService {
     return NotificationPage.fromJson(rawData);
   }
 
+  // Lấy số lượng thông báo chưa đọc
+  Future<int> getUnreadCount() async {
+    final response = await _apiClient.get(
+      '/notifications/unread-count',
+    );
+
+    final rawData = _parseMap(
+      response['data'],
+      'Dữ liệu thông báo chưa đọc không hợp lệ',
+    );
+
+    final unreadCount = rawData['unreadCount'];
+
+    if (unreadCount is num) {
+      return unreadCount.toInt();
+    }
+
+    return 0;
+  }
+
   // Đánh dấu một thông báo đã đọc
   Future<AppNotification> markAsRead(String id) async {
     final notificationId = id.trim();

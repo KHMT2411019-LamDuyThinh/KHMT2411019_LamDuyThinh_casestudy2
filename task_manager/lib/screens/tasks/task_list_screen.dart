@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
 import '../../models/task.dart';
 import '../../services/task_service.dart';
@@ -29,39 +30,37 @@ class _TaskListScreenState extends State<TaskListScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
-// Tìm kiếm công việc
+  // Tìm kiếm công việc
   final TextEditingController _searchController =
   TextEditingController();
 
-// Bộ lọc trạng thái
+  // Bộ lọc trạng thái
   String _selectedStatus = '';
 
-// Bộ lọc mức ưu tiên
+  // Bộ lọc mức ưu tiên
   String _selectedPriority = '';
 
-// Sắp xếp
+  // Sắp xếp
   String _sortBy = 'createdAt';
   String _sortOrder = 'desc';
 
   @override
   void initState() {
     super.initState();
+
     _loadTasks();
     _loadUnreadCount();
   }
 
-  // Lấy số lượng thông báo chưa đọc từ Backend
+  // Lấy số lượng thông báo chưa đọc từ API riêng
   Future<void> _loadUnreadCount() async {
     try {
-      final result = await _notificationService.getNotifications(
-        page: 1,
-        limit: 1,
-      );
+      final result = await _notificationService.getUnreadCount();
 
       if (!mounted) return;
 
       setState(() {
-        _unreadCount = result.unreadCount;
+        _unreadCount = result;
       });
     } catch (error) {
       debugPrint('Load unread notifications error: $error');
@@ -112,7 +111,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
       });
     }
   }
-// Xóa toàn bộ điều kiện tìm kiếm và lọc
+
+  // Xóa toàn bộ điều kiện tìm kiếm và lọc
   void _clearFilters() {
     setState(() {
       _searchController.clear();
@@ -125,7 +125,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
     _loadTasks();
   }
 
-// Giao diện tìm kiếm, lọc và sắp xếp
+  // Giao diện tìm kiếm, lọc và sắp xếp
   Widget _buildSearchAndFilters() {
     return Container(
       color: Colors.white,
@@ -335,6 +335,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       ),
     );
   }
+
   // Mở màn hình tạo công việc mới
   Future<void> _openCreateTask() async {
     final created = await Navigator.push<bool>(
@@ -350,9 +351,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
       await _loadTasks();
     }
   }
+
   // Xử lý đăng xuất
   Future<void> _logout() async {
-    // Hiển thị hộp thoại xác nhận
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -382,22 +383,18 @@ class _TaskListScreenState extends State<TaskListScreen> {
       },
     );
 
-    // Người dùng chọn Hủy
     if (shouldLogout != true) return;
 
     try {
-      // Xóa JWT Token đã lưu trên thiết bị
       await _authService.logout();
 
       if (!mounted) return;
 
-      // Quay về Login và xóa các màn hình trước đó
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/login',
             (route) => false,
       );
-
     } catch (error) {
       if (!mounted) return;
 
@@ -411,6 +408,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       );
     }
   }
+
   // Chuyển trạng thái sang tiếng Việt
   String _getStatusLabel(String status) {
     switch (status) {
@@ -683,6 +681,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           ),
         ],
       ),
+
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreateTask,
         icon: const Icon(Icons.add),
