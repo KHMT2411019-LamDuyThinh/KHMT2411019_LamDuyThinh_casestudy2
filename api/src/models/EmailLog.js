@@ -3,7 +3,6 @@ import mongoose from 'mongoose';
 
 const emailLogSchema = new mongoose.Schema(
     {
-        // Email của người nhận
         recipientEmail: {
             type: String,
             required: true,
@@ -11,21 +10,18 @@ const emailLogSchema = new mongoose.Schema(
             lowercase: true
         },
 
-        // Tài khoản người nhận
         recipientUserId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             default: null
         },
 
-        // Công việc liên quan
         taskId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Task',
             default: null
         },
 
-        // Loại sự kiện gửi Email
         eventType: {
             type: String,
             enum: [
@@ -34,12 +30,13 @@ const emailLogSchema = new mongoose.Schema(
                 'task_shared',
                 'task_share_removed',
                 'task_share_role_updated',
-                'task_status_changed'
+                'task_status_changed',
+                'task_updated',
+                'task_due_reminder'
             ],
             required: true
         },
 
-        // Tiêu đề Email
         subject: {
             type: String,
             required: true,
@@ -47,26 +44,59 @@ const emailLogSchema = new mongoose.Schema(
             maxlength: 255
         },
 
-        // Trạng thái gửi Email
+        // Nội dung văn bản để hỗ trợ gửi lại Email
+        textContent: {
+            type: String,
+            default: ''
+        },
+
+        // Nội dung HTML để hỗ trợ gửi lại Email
+        htmlContent: {
+            type: String,
+            default: ''
+        },
+
+        // Hạn công việc tương ứng với lần nhắc
+        reminderForDueDate: {
+            type: Date,
+            default: null
+        },
+
+        // Tổng số lần thử gửi Email
+        attempts: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+
+        // Mã khóa khi một tiến trình đang gửi Email
+        deliveryLockId: {
+            type: String,
+            default: ''
+        },
+
+        // Thời điểm bắt đầu khóa gửi Email
+        deliveryLockedAt: {
+            type: Date,
+            default: null
+        },
+
         status: {
             type: String,
             enum: ['pending', 'sent', 'failed'],
             default: 'pending'
         },
 
-        // Mã Email do SMTP trả về
         messageId: {
             type: String,
             default: ''
         },
 
-        // Nội dung lỗi nếu gửi thất bại
         errorMessage: {
             type: String,
             default: ''
         },
 
-        // Thời điểm gửi thành công
         sentAt: {
             type: Date,
             default: null
@@ -78,24 +108,44 @@ const emailLogSchema = new mongoose.Schema(
     }
 );
 
-// Tối ưu truy vấn lịch sử Email theo người nhận
+// Truy vấn lịch sử theo người nhận
 emailLogSchema.index({
     recipientUserId: 1,
     createdAt: -1
 });
 
-// Tối ưu truy vấn lịch sử Email theo công việc
+// Truy vấn lịch sử theo công việc
 emailLogSchema.index({
     taskId: 1,
     createdAt: -1
 });
 
-// Tối ưu truy vấn theo trạng thái gửi
+// Truy vấn theo trạng thái
 emailLogSchema.index({
     status: 1,
     createdAt: -1
 });
 
-const EmailLog = mongoose.model('EmailLog', emailLogSchema);
+// Chống gửi nhắc hạn trùng:
+// mỗi người chỉ có một bản ghi cho một công việc và một hạn cụ thể
+emailLogSchema.index(
+    {
+        taskId: 1,
+        recipientUserId: 1,
+        reminderForDueDate: 1
+    },
+    {
+        unique: true,
+        partialFilterExpression: {
+            eventType: 'task_due_reminder'
+        },
+        name: 'unique_task_due_reminder_per_recipient'
+    }
+);
+
+const EmailLog = mongoose.model(
+    'EmailLog',
+    emailLogSchema
+);
 
 export default EmailLog;

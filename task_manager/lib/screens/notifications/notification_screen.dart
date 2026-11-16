@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/notification.dart';
 import '../../services/notification_service.dart';
+import '../tasks/task_detail_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   final NotificationService? notificationService;
@@ -162,6 +163,36 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  // Đánh dấu đã đọc và mở công việc liên quan
+  Future<void> _openRelatedTask(
+      AppNotification notification,
+      ) async {
+    final taskId = notification.taskId?.trim();
+
+    // Đánh dấu đã đọc nếu thông báo chưa được đọc
+    await _markAsRead(notification);
+
+    if (!mounted) return;
+
+    // Kiểm tra thông báo có liên kết với công việc không
+    if (taskId == null || taskId.isEmpty) {
+      _showMessage(
+        'Thông báo này không có công việc liên quan',
+      );
+      return;
+    }
+
+    // Mở màn hình chi tiết công việc
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TaskDetailScreen(
+          taskId: taskId,
+        ),
+      ),
+    );
+  }
+
   // Đánh dấu tất cả thông báo đã đọc
   Future<void> _markAllAsRead() async {
     if (_unreadCount == 0 || _isMarkingAll) {
@@ -293,7 +324,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
           : theme.colorScheme.surfaceContainerLow,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _markAsRead(notification),
+
+        // Nhấn thông báo để đánh dấu đã đọc và mở công việc
+        onTap: () => _openRelatedTask(notification),
+
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(

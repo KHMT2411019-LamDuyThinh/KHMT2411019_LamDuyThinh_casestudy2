@@ -16,7 +16,6 @@ const getStatusLabel = (status) => ({
     completed: 'Đã hoàn thành'
 })[status] || status;
 
-
 // Chuẩn hóa ObjectId hoặc populated document thành chuỗi ID
 const normalizeId = (value) => {
     if (!value) return null;
@@ -506,6 +505,7 @@ export const updateTask = async (req, res) => {
             });
         }
 
+        // Giữ nguyên kiểm tra quyền của nhóm C
         const access = await getTaskAccess(task, req.userId);
 
         if (!access.canEdit) {
@@ -523,6 +523,16 @@ export const updateTask = async (req, res) => {
             priority
         } = req.body;
 
+        // Lưu thông tin cũ để so sánh
+        const previous = {
+            title: task.title,
+            description: task.description,
+            startDate: task.startDate,
+            dueDate: task.dueDate,
+            priority: task.priority
+        };
+
+        // Kiểm tra tiêu đề
         if (title !== undefined) {
             if (typeof title !== 'string' || !title.trim()) {
                 return res.status(400).json({
@@ -530,48 +540,59 @@ export const updateTask = async (req, res) => {
                     message: 'Task title is required'
                 });
             }
-
-            task.title = title.trim();
         }
 
-        if (description !== undefined) {
-            if (typeof description !== 'string') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Task description must be a string'
-                });
-            }
-
-            task.description = description.trim();
+        // Kiểm tra mô tả
+        if (
+            description !== undefined &&
+            typeof description !== 'string'
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Task description must be a string'
+            });
         }
 
-        if (priority !== undefined) {
-            if (!['low', 'medium', 'high'].includes(priority)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid task priority'
-                });
-            }
-
-            task.priority = priority;
+        // Kiểm tra mức ưu tiên
+        if (
+            priority !== undefined &&
+            !['low', 'medium', 'high'].includes(priority)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid task priority'
+            });
         }
 
+        // Phân tích ngày tháng
         const parseDate = (value, currentDate) => {
             if (value === undefined) {
-                return { valid: true, date: currentDate };
+                return {
+                    valid: true,
+                    date: currentDate
+                };
             }
 
             if (value === null || value === '') {
-                return { valid: true, date: null };
+                return {
+                    valid: true,
+                    date: null
+                };
             }
 
             const date = new Date(value);
 
             if (Number.isNaN(date.getTime())) {
-                return { valid: false, date: null };
+                return {
+                    valid: false,
+                    date: null
+                };
             }
 
-            return { valid: true, date };
+            return {
+                valid: true,
+                date
+            };
         };
 
         const parsedStartDate = parseDate(
@@ -602,14 +623,218 @@ export const updateTask = async (req, res) => {
             });
         }
 
-        task.startDate = parsedStartDate.date;
-        task.dueDate = parsedDueDate.date;
+        // Xác định thông tin mới
+        const updatedTitle = title !== undefined
+            ? title.trim()
+            : previous.title;
+
+        const updatedDescription = description !== undefined
+            ? description.trim()
+            : previous.description;
+
+        const updatedPriority = priority !== undefined
+            ? priority
+            : previous.priority;
+
+        const updatedStartDate = parsedStartDate.date;
+        const updatedDueDate = parsedDueDate.date;
+
+        // Chuẩn hóa ngày tháng thành timestamp để so sánh
+        const getDateTime = (date) => {
+            return date ? new Date(date).getTime() : null;
+        };
+
+        // Định dạng ngày tháng cho thông báo
+        const formatDate = (date) => {
+            if (!date) return 'Chưa thiết lập';
+
+            const value = new Date(date)
+                .toISOString()
+                .slice(0, 10);
+
+            const [year, month, day] = value.split('-');
+
+            return `${day}/${month}/${year}`;
+        };
+
+        // Chuyển mức ưu tiên sang tiếng Việt
+        const priorityLabels = {
+            low: 'Thấp',
+            medium: 'Trung bình',
+            high: 'Cao'
+        };
+
+        // Xác định những nội dung thực sự thay đổi
+        const changes = [];
+
+        if (previous.title !== updatedTitle) {
+            changes.push(
+                `Tên công việc: "${previous.title}" → "${updatedTitle}"`
+            );
+        }
+
+        if (previous.description !== updatedDescription) {
+            changes.push('Mô tả công việc đã thay đổi');
+        }
+
+        if (
+            getDateTime(previous.startDate) !==
+            getDateTime(updatedStartDate)
+        ) {
+            changes.push(
+                `Ngày bắt đầu: ${formatDate(previous.startDate)} → ${formatDate(updatedStartDate)}`
+            );
+        }
+
+        if (
+            getDateTime(previous.dueDate) !==
+            getDateTime(updatedDueDate)
+        ) {
+            changes.push(
+                `Hạn hoàn thành: ${formatDate(previous.dueDate)} → ${formatDate(updatedDueDate)}`
+            );
+        }
+
+        if (previous.priority !== updatedPriority) {
+            changes.push(
+                `Mức ưu tiên: ${priorityLabels[previous.priority] || previous.priority} → ${priorityLabels[updatedPriority] || updatedPriority}`
+            );
+        }
+
+        // Cập nhật dữ liệu công việc
+        task.title = updatedTitle;
+        task.description = updatedDescription;
+        task.priority = updatedPriority;
+        task.startDate = updatedStartDate;
+        task.dueDate = updatedDueDate;
 
         await task.save();
 
-        await task.populate('createdBy', 'fullName email avatarUrl');
-        await task.populate('assigneeIds', 'fullName email avatarUrl');
-        await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
+        // Chỉ thông báo nếu dữ liệu thực sự thay đổi
+        if (changes.length > 0) {
+            try {
+                // Lấy người được chia sẻ công việc
+                const shares = await TaskShare.find({
+                    taskId: task._id
+                }).select('userId');
+
+                // Gộp người tạo, người được giao và người được chia sẻ
+                const recipientIds = [
+                    task.createdBy,
+                    ...(task.assigneeIds || []),
+                    ...shares.map(share => share.userId)
+                ]
+                    .filter(Boolean)
+                    .map(id => String(id));
+
+                // Loại bỏ ID trùng và người đang thực hiện cập nhật
+                const uniqueRecipientIds = [
+                    ...new Set(recipientIds)
+                ].filter(id => id !== String(req.userId));
+
+                if (uniqueRecipientIds.length > 0) {
+                    const changeSummary = changes.join('; ');
+
+                    const notificationMessage = (
+                        `Công việc "${task.title}" đã được cập nhật. ` +
+                        `Nội dung thay đổi: ${changeSummary}`
+                    ).slice(0, 500);
+
+                    // Tạo thông báo trong ứng dụng
+                    try {
+                        const notificationDocs =
+                            uniqueRecipientIds.map(userId => ({
+                                userId,
+                                actorId: req.userId,
+                                taskId: task._id,
+                                type: 'task_updated',
+                                title: 'Thông tin công việc đã thay đổi',
+                                message: notificationMessage
+                            }));
+
+                        await Notification.insertMany(
+                            notificationDocs
+                        );
+                    } catch (notificationError) {
+                        console.error(
+                            'Create task update notifications error:',
+                            notificationError.message
+                        );
+                    }
+
+                    // Gửi email cho người liên quan
+                    try {
+                        const recipients = await User.find({
+                            _id: {
+                                $in: uniqueRecipientIds
+                            }
+                        }).select('_id fullName email');
+
+                        const actorName =
+                            req.user?.fullName || 'Một thành viên';
+
+                        for (const recipient of recipients) {
+                            if (!recipient.email) continue;
+
+                            const emailResult =
+                                await sendNotificationEmail({
+                                    recipientEmail: recipient.email,
+                                    recipientUserId: recipient._id,
+                                    taskId: task._id,
+                                    eventType: 'task_updated',
+                                    subject: (
+                                        `Thông tin công việc đã thay đổi: ${task.title}`
+                                    ).slice(0, 255),
+                                    text: `Xin chào ${recipient.fullName || 'bạn'},
+
+${actorName} vừa cập nhật công việc "${task.title}".
+
+Các nội dung thay đổi:
+${changes.map(change => `- ${change}`).join('\n')}
+
+Hãy đăng nhập vào Task Manager để xem chi tiết công việc.
+
+Trân trọng,
+Task Manager`
+                                });
+
+                            if (!emailResult.success) {
+                                console.error(
+                                    `Task update email failed for ${recipient.email}:`,
+                                    emailResult.errorMessage
+                                );
+                            }
+                        }
+                    } catch (emailError) {
+                        console.error(
+                            'Task update email processing error:',
+                            emailError.message
+                        );
+                    }
+                }
+            } catch (recipientError) {
+                console.error(
+                    'Get task update recipients error:',
+                    recipientError.message
+                );
+            }
+        }
+
+        // Populate dữ liệu trả về
+        await task.populate(
+            'createdBy',
+            'fullName email avatarUrl'
+        );
+
+        await task.populate(
+            'assigneeIds',
+            'fullName email avatarUrl'
+        );
+
+        await task.populate(
+            'primaryAssigneeId',
+            'fullName email avatarUrl'
+        );
 
         return res.status(200).json({
             success: true,

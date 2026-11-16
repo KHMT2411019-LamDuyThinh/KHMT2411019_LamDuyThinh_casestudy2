@@ -58,6 +58,30 @@ export const getNotifications = async (req, res) => {
     }
 };
 
+// Lấy số lượng thông báo chưa đọc của người dùng hiện tại
+export const getUnreadNotificationCount = async (req, res) => {
+    try {
+        const unreadCount = await Notification.countDocuments({
+            userId: req.userId,
+            isRead: false
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                unreadCount
+            }
+        });
+    } catch (error) {
+        console.error('Get unread notification count error:', error);
+
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve unread notification count'
+        });
+    }
+};
+
 // Đánh dấu một thông báo đã đọc
 export const markNotificationAsRead = async (req, res) => {
     try {
