@@ -8,6 +8,7 @@ import Notification from '../models/Notification.js';
 
 import { sendNotificationEmail } from '../services/emailService.js';
 import { getTaskAccess } from '../services/taskAccessService.js';
+import { recordTaskActivity } from '../services/taskActivityService.js';
 
 // ==========================================
 // HÀM HỖ TRỢ
@@ -400,6 +401,7 @@ export const addTaskAssignees = async (req, res) => {
         }
 
         const previousIds = uniqueIds(task.assigneeIds);
+        const previousPrimaryId = toId(task.primaryAssigneeId);
 
         const addedIds = newIds.filter(
             id => !previousIds.includes(id)
@@ -430,6 +432,33 @@ export const addTaskAssignees = async (req, res) => {
         task.assigneeIds = finalIds;
 
         await task.save();
+
+        if (addedIds.length > 0) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'assignees_added',
+                taskTitle: task.title,
+                details: {
+                    addedUserIds: addedIds
+                }
+            });
+        }
+
+        const currentPrimaryId = toId(task.primaryAssigneeId);
+
+        if (previousPrimaryId !== currentPrimaryId) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'primary_assignee_changed',
+                taskTitle: task.title,
+                details: {
+                    previousPrimaryAssigneeId: previousPrimaryId,
+                    newPrimaryAssigneeId: currentPrimaryId
+                }
+            });
+        }
 
         await notifyAssignmentChanges({
             task,
@@ -534,6 +563,7 @@ export const assignTask = async (req, res) => {
         // Nếu client không gửi primaryAssigneeId, giữ người phụ trách chính
         // hiện tại nếu người đó vẫn nằm trong danh sách mới.
         const currentPrimaryId = toId(task.primaryAssigneeId);
+        const previousPrimaryId = currentPrimaryId;
         let nextPrimaryId;
 
         if (hasPrimaryAssignee) {
@@ -564,6 +594,47 @@ export const assignTask = async (req, res) => {
         task.primaryAssigneeId = nextPrimaryId;
 
         await task.save();
+
+        if (newlyAssignedIds.length > 0) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'assignees_added',
+                taskTitle: task.title,
+                details: {
+                    addedUserIds: newlyAssignedIds
+                }
+            });
+        }
+
+        if (unassignedIds.length > 0) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'assignees_removed',
+                taskTitle: task.title,
+                details: {
+                    removedUserIds: unassignedIds
+                }
+            });
+        }
+
+        const normalizedNextPrimaryId = nextPrimaryId
+            ? String(nextPrimaryId)
+            : null;
+
+        if (previousPrimaryId !== normalizedNextPrimaryId) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'primary_assignee_changed',
+                taskTitle: task.title,
+                details: {
+                    previousPrimaryAssigneeId: previousPrimaryId,
+                    newPrimaryAssigneeId: normalizedNextPrimaryId
+                }
+            });
+        }
 
         await notifyAssignmentChanges({
             task,
@@ -627,6 +698,8 @@ export const updateTaskAssignee = async (req, res) => {
             });
         }
 
+        const previousPrimaryId = toId(task.primaryAssigneeId);
+
         // Hỗ trợ isPrimary hoặc primaryAssignee
         const isPrimary =
             req.body.isPrimary ??
@@ -642,8 +715,6 @@ export const updateTaskAssignee = async (req, res) => {
         if (isPrimary) {
             task.primaryAssigneeId = userId;
         } else if (toId(task.primaryAssigneeId) === userId) {
-            // Không để công việc còn người được giao nhưng mất người phụ trách chính.
-            // Chuyển vai trò chính sang người được giao khác đầu tiên.
             const replacementId = uniqueIds(task.assigneeIds).find(
                 assigneeId => assigneeId !== userId
             );
@@ -659,6 +730,22 @@ export const updateTaskAssignee = async (req, res) => {
         }
 
         await task.save();
+
+        const currentPrimaryId = toId(task.primaryAssigneeId);
+
+        if (previousPrimaryId !== currentPrimaryId) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'primary_assignee_changed',
+                taskTitle: task.title,
+                details: {
+                    previousPrimaryAssigneeId: previousPrimaryId,
+                    newPrimaryAssigneeId: currentPrimaryId
+                }
+            });
+        }
+
         await populateTask(task);
 
         return res.status(200).json({
@@ -703,6 +790,7 @@ export const removeTaskAssignee = async (req, res) => {
         }
 
         const previousIds = uniqueIds(task.assigneeIds);
+        const previousPrimaryId = toId(task.primaryAssigneeId);
 
         if (!previousIds.includes(userId)) {
             return res.status(404).json({
@@ -724,6 +812,31 @@ export const removeTaskAssignee = async (req, res) => {
         }
 
         await task.save();
+
+        await recordTaskActivity({
+            taskId: task._id,
+            userId: req.userId,
+            action: 'assignees_removed',
+            taskTitle: task.title,
+            details: {
+                removedUserIds: [userId]
+            }
+        });
+
+        const currentPrimaryId = toId(task.primaryAssigneeId);
+
+        if (previousPrimaryId !== currentPrimaryId) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'primary_assignee_changed',
+                taskTitle: task.title,
+                details: {
+                    previousPrimaryAssigneeId: previousPrimaryId,
+                    newPrimaryAssigneeId: currentPrimaryId
+                }
+            });
+        }
 
         // Chỉ gỡ vai trò Assignee; không xóa TaskShare nếu người này
         // vẫn được chia sẻ công việc dưới quyền viewer/editor.
@@ -854,6 +967,17 @@ export const createTaskShare = async (req, res) => {
         // insertMany tạo các bản ghi chia sẻ trong cùng một thao tác.
         const createdShares = await TaskShare.insertMany(shareDocs, {
             ordered: true
+        });
+
+        await recordTaskActivity({
+            taskId: task._id,
+            userId: req.userId,
+            action: 'task_shared',
+            taskTitle: task.title,
+            details: {
+                sharedUserIds: userIds,
+                role
+            }
         });
 
         const userMap = new Map(
@@ -1044,6 +1168,18 @@ export const updateTaskShare = async (req, res) => {
             share.role = role;
             await share.save();
 
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'task_share_role_updated',
+                taskTitle: task.title,
+                details: {
+                    targetUserId: String(share.userId),
+                    previousRole,
+                    newRole: role
+                }
+            });
+
             const recipient = await User.findById(share.userId)
                 .select('_id fullName email');
 
@@ -1155,6 +1291,17 @@ export const deleteTaskShare = async (req, res) => {
         const revokedRole = share.role;
 
         await share.deleteOne();
+
+        await recordTaskActivity({
+            taskId: task._id,
+            userId: req.userId,
+            action: 'task_share_removed',
+            taskTitle: task.title,
+            details: {
+                targetUserId: String(share.userId),
+                revokedRole
+            }
+        });
 
         // Chỉ thu hồi vai trò Shared.
         // Nếu người này vẫn là Assignee, quyền Assignee vẫn được giữ.

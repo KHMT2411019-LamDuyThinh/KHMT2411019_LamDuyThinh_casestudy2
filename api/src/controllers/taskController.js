@@ -6,6 +6,7 @@ import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { sendNotificationEmail } from '../services/emailService.js';
 import { getTaskAccess } from '../services/taskAccessService.js';
+import { recordTaskActivity } from '../services/taskActivityService.js';
 
 const isValidId = (id) =>
     typeof id === 'string' && mongoose.isValidObjectId(id);
@@ -458,6 +459,22 @@ export const createTask = async (req, res) => {
             priority
         });
 
+        // Ghi nhận lịch sử tạo công việc
+        await recordTaskActivity({
+            taskId: task._id,
+            userId: req.userId,
+            action: 'task_created',
+            taskTitle: task.title,
+            details: {
+                title: task.title,
+                description: task.description,
+                priority: task.priority,
+                status: task.status,
+                startDate: task.startDate,
+                dueDate: task.dueDate
+            }
+        });
+
         await task.populate(
             'createdBy',
             'fullName email avatarUrl'
@@ -710,6 +727,33 @@ export const updateTask = async (req, res) => {
 
         await task.save();
 
+        // Ghi nhận lịch sử chỉnh sửa công việc
+        if (changes.length > 0) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'task_updated',
+                taskTitle: task.title,
+                details: {
+                    changes,
+                    previous: {
+                        title: previous.title,
+                        description: previous.description,
+                        priority: previous.priority,
+                        startDate: previous.startDate,
+                        dueDate: previous.dueDate
+                    },
+                    current: {
+                        title: task.title,
+                        description: task.description,
+                        priority: task.priority,
+                        startDate: task.startDate,
+                        dueDate: task.dueDate
+                    }
+                }
+            });
+        }
+
         // Chỉ thông báo nếu dữ liệu thực sự thay đổi
         if (changes.length > 0) {
             try {
@@ -888,6 +932,21 @@ export const deleteTask = async (req, res) => {
             taskId: task._id
         });
 
+        // Ghi nhận lịch sử xóa công việc.
+        // TaskActivity giữ lại taskId và taskTitle dù Task đã bị xóa.
+        await recordTaskActivity({
+            taskId: task._id,
+            userId: req.userId,
+            action: 'task_deleted',
+            taskTitle: task.title,
+            details: {
+                title: task.title,
+                description: task.description,
+                status: task.status,
+                priority: task.priority
+            }
+        });
+
         return res.status(200).json({
             success: true,
             message: 'Task deleted successfully'
@@ -951,6 +1010,20 @@ export const updateTaskStatus = async (req, res) => {
 
         task.status = status;
         await task.save();
+
+        // Chỉ ghi nhận lịch sử khi trạng thái thực sự thay đổi
+        if (previousStatus !== status) {
+            await recordTaskActivity({
+                taskId: task._id,
+                userId: req.userId,
+                action: 'task_status_changed',
+                taskTitle: task.title,
+                details: {
+                    previousStatus,
+                    newStatus: status
+                }
+            });
+        }
 
         // Chỉ thông báo và gửi email khi trạng thái thực sự thay đổi
         if (previousStatus !== status) {
