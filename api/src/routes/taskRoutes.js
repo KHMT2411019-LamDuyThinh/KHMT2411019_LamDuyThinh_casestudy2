@@ -12,7 +12,11 @@ import {
 
 import {
     searchMembers,
+    getTaskAssignees,
+    addTaskAssignees,
     assignTask,
+    updateTaskAssignee,
+    removeTaskAssignee,
     createTaskShare,
     getTaskShares,
     updateTaskShare,
@@ -24,32 +28,78 @@ import authMiddleware from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // ==========================================
-// NHÓM C: PHÂN CÔNG VÀ CHIA SẺ CÔNG VIỆC
+// TÌM KIẾM THÀNH VIÊN – TƯƠNG THÍCH API CŨ
 // ==========================================
 
-// Tìm kiếm thành viên
-// Phải đặt trước router GET '/:id'
 router.get('/members', authMiddleware, searchMembers);
 
-// Phân công thành viên cho công việc
-router.put('/:id/assignees', authMiddleware, assignTask);
+// ==========================================
+// NHÓM C: GIAO VIỆC
+// ==========================================
 
-// Chia sẻ công việc
-router.post('/:id/shares', authMiddleware, createTaskShare);
+// Lấy danh sách người được giao
+router.get(
+    '/:id/assignees',
+    authMiddleware,
+    getTaskAssignees
+);
 
-// Lấy danh sách người được chia sẻ
-router.get('/:id/shares', authMiddleware, getTaskShares);
+// Giao thêm một hoặc nhiều người
+router.post(
+    '/:id/assignees',
+    authMiddleware,
+    addTaskAssignees
+);
 
-// Thay đổi quyền chia sẻ
+// Cập nhật người phụ trách chính
 router.patch(
-    '/:id/shares/:userId',
+    '/:id/assignees/:userId',
+    authMiddleware,
+    updateTaskAssignee
+);
+
+// Hủy giao việc cho một người
+router.delete(
+    '/:id/assignees/:userId',
+    authMiddleware,
+    removeTaskAssignee
+);
+
+// API cũ: cập nhật toàn bộ danh sách Assignee
+router.put(
+    '/:id/assignees',
+    authMiddleware,
+    assignTask
+);
+
+// ==========================================
+// NHÓM C: CHIA SẺ VÀ PHÂN QUYỀN
+// ==========================================
+
+// Lấy danh sách chia sẻ
+router.get(
+    '/:id/shares',
+    authMiddleware,
+    getTaskShares
+);
+
+// Chia sẻ cho một người
+router.post(
+    '/:id/shares',
+    authMiddleware,
+    createTaskShare
+);
+
+// Thay đổi quyền viewer/editor
+router.patch(
+    '/:id/shares/:shareId',
     authMiddleware,
     updateTaskShare
 );
 
 // Thu hồi quyền chia sẻ
 router.delete(
-    '/:id/shares/:userId',
+    '/:id/shares/:shareId',
     authMiddleware,
     deleteTaskShare
 );
@@ -59,16 +109,19 @@ router.delete(
 // ==========================================
 
 // Lấy danh sách công việc
-// Hỗ trợ tìm kiếm, lọc và sắp xếp
 router.get('/', authMiddleware, getTasks);
 
-// Tạo công việc mới
+// Tạo công việc
 router.post('/', authMiddleware, createTask);
 
-// Cập nhật trạng thái công việc
-router.patch('/:id/status', authMiddleware, updateTaskStatus);
+// Cập nhật trạng thái
+router.patch(
+    '/:id/status',
+    authMiddleware,
+    updateTaskStatus
+);
 
-// Chỉnh sửa thông tin công việc
+// Chỉnh sửa công việc
 router.put('/:id', authMiddleware, updateTask);
 
 // Xóa công việc
