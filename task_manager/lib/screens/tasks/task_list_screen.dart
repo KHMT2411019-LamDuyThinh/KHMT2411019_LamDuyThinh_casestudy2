@@ -4,6 +4,8 @@ import '../../services/auth_service.dart';
 import '../../models/task.dart';
 import '../../services/task_service.dart';
 import 'task_form_screen.dart';
+import '../notifications/notification_screen.dart';
+import '../../services/notification_service.dart';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -15,6 +17,12 @@ class TaskListScreen extends StatefulWidget {
 class _TaskListScreenState extends State<TaskListScreen> {
   final TaskService _taskService = TaskService();
   final AuthService _authService = AuthService();
+
+  // Quản lý thông báo
+  final NotificationService _notificationService =
+  NotificationService();
+
+  int _unreadCount = 0;
 
   List<Task> _tasks = [];
 
@@ -39,7 +47,27 @@ class _TaskListScreenState extends State<TaskListScreen> {
   void initState() {
     super.initState();
     _loadTasks();
+    _loadUnreadCount();
   }
+
+  // Lấy số lượng thông báo chưa đọc từ Backend
+  Future<void> _loadUnreadCount() async {
+    try {
+      final result = await _notificationService.getNotifications(
+        page: 1,
+        limit: 1,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _unreadCount = result.unreadCount;
+      });
+    } catch (error) {
+      debugPrint('Load unread notifications error: $error');
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -611,6 +639,31 @@ class _TaskListScreenState extends State<TaskListScreen> {
             onPressed: _loadTasks,
             icon: const Icon(Icons.refresh),
             tooltip: 'Tải lại',
+          ),
+
+          // Nút thông báo kèm số lượng chưa đọc
+          IconButton(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationScreen(),
+                ),
+              );
+
+              if (!mounted) return;
+
+              // Cập nhật lại số thông báo khi quay về
+              await _loadUnreadCount();
+            },
+            icon: Badge(
+              isLabelVisible: _unreadCount > 0,
+              label: Text(
+                _unreadCount > 99 ? '99+' : '$_unreadCount',
+              ),
+              child: const Icon(Icons.notifications_none),
+            ),
+            tooltip: 'Thông báo',
           ),
 
           // Nút mở thông tin cá nhân

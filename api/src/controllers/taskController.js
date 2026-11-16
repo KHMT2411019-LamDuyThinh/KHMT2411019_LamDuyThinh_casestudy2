@@ -2,6 +2,10 @@
 import mongoose from 'mongoose';
 import Task from '../models/Task.js';
 import TaskShare from '../models/TaskShare.js';
+import Notification from '../models/Notification.js';
+import User from '../models/User.js';
+import { sendNotificationEmail } from '../services/emailService.js';
+
 
 // Xác định vai trò của người dùng đối với một công việc
 const getTaskRole = async (task, userId) => {
@@ -652,9 +656,143 @@ if (!['owner', 'assignee', 'editor'].includes(role)) {
     });
 }
 
+        // Lưu trạng thái trước khi cập nhật
+        const previousStatus = task.status;
+
         // Cập nhật trạng thái
         task.status = status;
         await task.save();
+
+
+// Chỉ tạo thông báo khi trạng thái thực sự thay đổi
+if (previousStatus !== status) {
+    try {
+        // Lấy danh sách người được chia sẻ công việc
+        const shares = await TaskShare.find({
+            taskId: task._id
+        }).select('userId');
+
+        // Tập hợp Owner, Assignee và người được chia sẻ
+        const recipientIds = [
+            task.createdBy,
+            ...(task.assigneeIds || []),
+            ...shares.map(share => share.userId)
+        ]
+            .filter(Boolean)
+            .map(id => String(id));
+
+        // Loại bỏ ID trùng lặp và người thực hiện thay đổi
+        const uniqueRecipientIds = [
+            ...new Set(recipientIds)
+        ].filter(id => id !== String(req.userId));
+
+        // Chuyển trạng thái thành nội dung dễ đọc
+        const statusLabels = {
+            todo: 'Chưa bắt đầu',
+            in_progress: 'Đang thực hiện',
+            completed: 'Đã hoàn thành'
+        };
+
+        // Tạo thông báo cho các thành viên liên quan
+        if (uniqueRecipientIds.length > 0) {
+            const notificationDocs = uniqueRecipientIds.map(userId => ({
+                userId,
+                actorId: req.userId,
+                taskId: task._id,
+                type: 'task_status_changed',
+                title: 'Trạng thái công việc đã thay đổi',
+                message: `Công việc "${task.title}" đã thay đổi từ "${statusLabels[previousStatus]}" sang "${statusLabels[status]}".`
+            }));
+
+            await Notification.insertMany(notificationDocs);
+        }
+    } catch (notificationError) {
+        console.error(
+            'Create task status notification error:',
+            notificationError.message
+        );
+    }
+}
+
+
+        // Gửi Email khi trạng thái công việc thực sự thay đổi
+        if (previousStatus !== status) {
+            try {
+                // Lấy danh sách người được chia sẻ
+                const shares = await TaskShare.find({
+                    taskId: task._id
+                }).select('userId');
+
+                // Tập hợp Owner, Assignee và người được chia sẻ
+                const recipientIds = [
+                    task.createdBy,
+                    ...(task.assigneeIds || []),
+                    ...shares.map(share => share.userId)
+                ]
+                    .filter(Boolean)
+                    .map(id => String(id));
+
+                // Loại bỏ ID trùng và người thực hiện thay đổi
+                const uniqueRecipientIds = [
+                    ...new Set(recipientIds)
+                ].filter(id => id !== String(req.userId));
+
+                if (uniqueRecipientIds.length > 0) {
+                    // Lấy thông tin người nhận Email
+                    const recipients = await User.find({
+                        _id: { $in: uniqueRecipientIds }
+                    }).select('_id fullName email');
+
+                    const statusLabels = {
+                        todo: 'Chưa bắt đầu',
+                        in_progress: 'Đang thực hiện',
+                        completed: 'Đã hoàn thành'
+                    };
+
+                    const actorName = req.user?.fullName || 'Thành viên';
+
+                    // Gửi Email cho từng thành viên liên quan
+                    for (const recipient of recipients) {
+                        if (!recipient.email) {
+                            continue;
+                        }
+
+                        const emailResult = await sendNotificationEmail({
+                            recipientEmail: recipient.email,
+                            recipientUserId: recipient._id,
+                            taskId: task._id,
+                            eventType: 'task_status_changed',
+
+                            subject: `Trạng thái công việc đã thay đổi: ${task.title}`,
+
+                            text: `Xin chào ${recipient.fullName || 'bạn'},
+
+${actorName} vừa thay đổi trạng thái công việc "${task.title}".
+
+Trạng thái trước đó: ${statusLabels[previousStatus]}.
+Trạng thái hiện tại: ${statusLabels[status]}.
+
+Hãy đăng nhập vào Task Manager để theo dõi công việc.
+
+Trân trọng,
+Task Manager`
+                        });
+
+                        if (!emailResult.success) {
+                            console.error(
+                                `Task status email failed for ${recipient.email}:`,
+                                emailResult.errorMessage
+                            );
+                        }
+                    }
+                }
+            } catch (emailError) {
+                console.error(
+                    'Task status email processing error:',
+                    emailError.message
+                );
+            }
+        }
 
         // Lấy thông tin liên quan
         await task.populate('createdBy', 'fullName email avatarUrl');

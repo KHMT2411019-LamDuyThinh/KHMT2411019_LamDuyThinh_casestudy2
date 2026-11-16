@@ -4,6 +4,7 @@ import cors from 'cors';
 
 import authRoutes from './routes/authRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 const app = express();
 
@@ -23,6 +24,8 @@ app.use('/api/auth', authRoutes);
 
 // API quản lý và đọc công việc
 app.use('/api/tasks', taskRoutes);
+
+app.use('/api/notifications', notificationRoutes);
 
 // Xử lý đường dẫn không tồn tại
 app.use((req, res) => {
