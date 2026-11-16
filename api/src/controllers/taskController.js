@@ -5,65 +5,116 @@ import TaskShare from '../models/TaskShare.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { sendNotificationEmail } from '../services/emailService.js';
+import { getTaskAccess } from '../services/taskAccessService.js';
+
+const isValidId = (id) =>
+    typeof id === 'string' && mongoose.isValidObjectId(id);
+
+const getStatusLabel = (status) => ({
+    todo: 'Chưa bắt đầu',
+    in_progress: 'Đang thực hiện',
+    completed: 'Đã hoàn thành'
+})[status] || status;
 
 
-// Xác định vai trò của người dùng đối với một công việc
-const getTaskRole = async (task, userId) => {
-    // Người tạo công việc
-    if (String(task.createdBy) === String(userId)) {
-        return 'owner';
+// Chuẩn hóa ObjectId hoặc populated document thành chuỗi ID
+const normalizeId = (value) => {
+    if (!value) return null;
+
+    return String(value._id ?? value);
+};
+
+// Lấy tất cả vai trò của người dùng đối với công việc
+const getAccessRoles = (task, userId, shareRole) => {
+    const roles = [];
+
+    if (
+        normalizeId(task.createdBy) === normalizeId(userId)
+    ) {
+        roles.push('owner');
     }
 
-    // Người được giao công việc
-    const isAssignee = task.assigneeIds.some(
-        id => String(id) === String(userId)
-    );
-
-    if (isAssignee) {
-        return 'assignee';
+    if ((task.assigneeIds || []).some(
+        id => normalizeId(id) === normalizeId(userId)
+    )) {
+        roles.push('assignee');
     }
 
-    // Người được chia sẻ công việc
-    const share = await TaskShare.findOne({
-        taskId: task._id,
-        userId
-    }).select('role');
-
-    if (share) {
-        return share.role;
+    if (shareRole === 'viewer') {
+        roles.push('viewer');
     }
 
-    // Không có quyền truy cập
+    if (shareRole === 'editor') {
+        roles.push('editor');
+    }
+
+    return roles;
+};
+
+// Xác định vai trò hiệu lực cao nhất
+const getEffectiveRole = (roles) => {
+    if (roles.includes('owner')) return 'owner';
+    if (roles.includes('editor')) return 'editor';
+    if (roles.includes('assignee')) return 'assignee';
+    if (roles.includes('viewer')) return 'viewer';
+
     return null;
 };
 
-// Lấy danh sách công việc
+// ==========================================
+// B. LẤY DANH SÁCH CÔNG VIỆC
+// ==========================================
 
-// Lấy danh sách công việc, tìm kiếm, lọc và sắp xếp
 export const getTasks = async (req, res) => {
     try {
+        const userId = req.userId;
+        const scope = req.query.scope;
 
-const userId = req.userId;
+        const allowedScopes = [
+            'created',
+            'assigned',
+            'shared'
+        ];
 
-// Lấy danh sách ID công việc được chia sẻ cho người dùng
-const sharedTaskIds = await TaskShare.distinct(
-    'taskId',
-    { userId }
-);
+        if (
+            scope !== undefined &&
+            !allowedScopes.includes(scope)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid task scope'
+            });
+        }
 
-// Lấy công việc do mình tạo, được giao hoặc được chia sẻ
-const conditions = [
-    {
-        $or: [
-            { createdBy: userId },
-            { assigneeIds: userId },
-            { _id: { $in: sharedTaskIds } }
-        ]
-    }
-];
+        const sharedTaskIds = await TaskShare.distinct(
+            'taskId',
+            { userId }
+        );
 
-        // Tìm kiếm theo tiêu đề hoặc mô tả
-        const search = req.query.search;
+        let roleCondition;
+
+        if (scope === 'created') {
+            roleCondition = { createdBy: userId };
+        } else if (scope === 'assigned') {
+            roleCondition = { assigneeIds: userId };
+        } else if (scope === 'shared') {
+            roleCondition = {
+                _id: { $in: sharedTaskIds }
+            };
+        } else {
+            roleCondition = {
+                $or: [
+                    { createdBy: userId },
+                    { assigneeIds: userId },
+                    { _id: { $in: sharedTaskIds } }
+                ]
+            };
+        }
+
+        const conditions = [roleCondition];
+
+        // Hỗ trợ cả search cũ và q theo tài liệu
+        const search = req.query.q ?? req.query.search;
 
         if (search !== undefined) {
             if (typeof search !== 'string') {
@@ -104,7 +155,6 @@ const conditions = [
             $and: conditions
         };
 
-        // Lọc theo trạng thái
         if (req.query.status !== undefined) {
             const allowedStatus = [
                 'todo',
@@ -125,7 +175,6 @@ const conditions = [
             filter.status = req.query.status;
         }
 
-        // Lọc theo mức độ ưu tiên
         if (req.query.priority !== undefined) {
             const allowedPriority = [
                 'low',
@@ -146,7 +195,7 @@ const conditions = [
             filter.priority = req.query.priority;
         }
 
-        // Kiểm tra trường sắp xếp
+        // Hỗ trợ cả order mới và sortOrder cũ
         const allowedSortFields = [
             'createdAt',
             'updatedAt',
@@ -158,84 +207,112 @@ const conditions = [
         ];
 
         const sortBy = req.query.sortBy || 'createdAt';
+        const sortOrder =
+            req.query.order ||
+            req.query.sortOrder ||
+            'desc';
 
-        if (
-            typeof sortBy !== 'string' ||
-            !allowedSortFields.includes(sortBy)
-        ) {
+        if (!allowedSortFields.includes(sortBy)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid sort field'
             });
         }
 
-        // Kiểm tra chiều sắp xếp
-const sortOrder = req.query.sortOrder || 'desc';
-
-if (
-    typeof sortOrder !== 'string' ||
-    !['asc', 'desc'].includes(sortOrder)
-) {
+        if (!['asc', 'desc'].includes(sortOrder)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid sort order'
             });
         }
 
-// Xác định chiều sắp xếp
-const sortDirection = sortOrder === 'asc' ? 1 : -1;
+        const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
-// Truy vấn MongoDB
-const tasks = await Task.find(filter)
-    .populate('createdBy', 'fullName email avatarUrl')
-    .populate('assigneeIds', 'fullName email avatarUrl')
-    .populate('primaryAssigneeId', 'fullName email avatarUrl')
-    .sort(
-        sortBy === 'priority' || sortBy === 'status'
-            ? { createdAt: -1 }
-            : { [sortBy]: sortDirection }
-    );
+        const tasks = await Task.find(filter)
+            .populate('createdBy', 'fullName email avatarUrl')
+            .populate('assigneeIds', 'fullName email avatarUrl')
+            .populate('primaryAssigneeId', 'fullName email avatarUrl')
+            .sort(
+                sortBy === 'priority' || sortBy === 'status'
+                    ? { createdAt: -1 }
+                    : { [sortBy]: sortDirection }
+            );
 
-// Sắp xếp mức ưu tiên theo thứ tự nghiệp vụ
-if (sortBy === 'priority') {
-    const priorityOrder = {
-        low: 1,
-        medium: 2,
-        high: 3
-    };
+        if (sortBy === 'priority') {
+            const priorityOrder = {
+                low: 1,
+                medium: 2,
+                high: 3
+            };
 
-    tasks.sort((a, b) => {
-        return (
-            (priorityOrder[a.priority] - priorityOrder[b.priority]) *
-            sortDirection
+            tasks.sort((a, b) =>
+                (
+                    priorityOrder[a.priority] -
+                    priorityOrder[b.priority]
+                ) * sortDirection
+            );
+        }
+
+        if (sortBy === 'status') {
+            const statusOrder = {
+                todo: 1,
+                in_progress: 2,
+                completed: 3
+            };
+
+            tasks.sort((a, b) =>
+                (
+                    statusOrder[a.status] -
+                    statusOrder[b.status]
+                ) * sortDirection
+            );
+        }
+
+        // Lấy quyền chia sẻ của người dùng cho toàn bộ danh sách
+        const taskIds = tasks.map(task => task._id);
+
+        const shares = taskIds.length > 0
+            ? await TaskShare.find({
+                taskId: { $in: taskIds },
+                userId
+            }).select('taskId role')
+            : [];
+
+        const shareRoleMap = new Map(
+            shares.map(share => [
+                String(share.taskId),
+                share.role
+            ])
         );
-    });
-}
 
-// Sắp xếp trạng thái theo thứ tự nghiệp vụ
-if (sortBy === 'status') {
-    const statusOrder = {
-        todo: 1,
-        in_progress: 2,
-        completed: 3
-    };
+        // Bổ sung vai trò truy cập cho từng công việc
+        const resultTasks = tasks.map(task => {
+            const shareRole = shareRoleMap.get(
+                String(task._id)
+            );
 
-    tasks.sort((a, b) => {
-        return (
-            (statusOrder[a.status] - statusOrder[b.status]) *
-            sortDirection
-        );
-    });
-}
+            const accessRoles = getAccessRoles(
+                task,
+                userId,
+                shareRole
+            );
+
+            return {
+                ...task.toObject(),
+                accessRole: getEffectiveRole(accessRoles),
+                accessRoles
+            };
+        });
+
         return res.status(200).json({
             success: true,
             message: 'Get tasks successfully',
-            total: tasks.length,
-            tasks
+            total: resultTasks.length,
+            tasks: resultTasks
         });
 
     } catch (error) {
-        console.error('Get tasks error:', error.message);
+        console.error('Get tasks error:', error);
 
         return res.status(500).json({
             success: false,
@@ -244,10 +321,12 @@ if (sortBy === 'status') {
     }
 };
 
-// Lấy chi tiết một công việc
+// ==========================================
+// LẤY CHI TIẾT CÔNG VIỆC
+// ==========================================
+
 export const getTaskById = async (req, res) => {
     try {
-        const userId = req.userId;
         const taskId = req.params.id;
 
         if (!mongoose.isValidObjectId(taskId)) {
@@ -257,39 +336,38 @@ export const getTaskById = async (req, res) => {
             });
         }
 
-const task = await Task.findById(taskId);
+        const task = await Task.findById(taskId);
 
-if (!task) {
-    return res.status(404).json({
-        success: false,
-        message: 'Task not found'
-    });
-}
+        if (!task) {
+            return res.status(404).json({
+                success: false,
+                message: 'Task not found'
+            });
+        }
 
-// Xác định quyền truy cập
-const role = await getTaskRole(task, userId);
+        const access = await getTaskAccess(task, req.userId);
 
-if (!role) {
-    return res.status(404).json({
-        success: false,
-        message: 'Task not found or access denied'
-    });
-}
+        if (!access.canView) {
+            return res.status(404).json({
+                success: false,
+                message: 'Task not found or access denied'
+            });
+        }
 
-// Lấy thông tin người liên quan
-await task.populate('createdBy', 'fullName email avatarUrl');
-await task.populate('assigneeIds', 'fullName email avatarUrl');
-await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
+        await task.populate('createdBy', 'fullName email avatarUrl');
+        await task.populate('assigneeIds', 'fullName email avatarUrl');
+        await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
 
-return res.status(200).json({
-    success: true,
-    message: 'Get task successfully',
-    task,
-    accessRole: role
-});
+        return res.status(200).json({
+            success: true,
+            message: 'Get task successfully',
+            task,
+            accessRole: access.accessRole,
+            accessRoles: access.roles
+        });
 
     } catch (error) {
-        console.error('Get task detail error:', error.message);
+        console.error('Get task detail error:', error);
 
         return res.status(500).json({
             success: false,
@@ -298,7 +376,10 @@ return res.status(200).json({
     }
 };
 
-// Tạo công việc mới
+// ==========================================
+// TẠO CÔNG VIỆC
+// ==========================================
+
 export const createTask = async (req, res) => {
     try {
         const {
@@ -309,7 +390,6 @@ export const createTask = async (req, res) => {
             priority = 'medium'
         } = req.body;
 
-        // Kiểm tra tiêu đề
         if (typeof title !== 'string' || !title.trim()) {
             return res.status(400).json({
                 success: false,
@@ -317,7 +397,6 @@ export const createTask = async (req, res) => {
             });
         }
 
-        // Kiểm tra mô tả
         if (typeof description !== 'string') {
             return res.status(400).json({
                 success: false,
@@ -325,19 +404,19 @@ export const createTask = async (req, res) => {
             });
         }
 
-        // Kiểm tra mức ưu tiên
-        const allowedPriority = ['low', 'medium', 'high'];
-
-        if (!allowedPriority.includes(priority)) {
+        if (!['low', 'medium', 'high'].includes(priority)) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid task priority'
             });
         }
 
-        // Chuyển đổi và kiểm tra ngày tháng
         const parseDate = (value) => {
-            if (value === undefined || value === null || value === '') {
+            if (
+                value === undefined ||
+                value === null ||
+                value === ''
+            ) {
                 return { valid: true, date: null };
             }
 
@@ -360,7 +439,6 @@ export const createTask = async (req, res) => {
             });
         }
 
-        // Ngày hết hạn không được trước ngày bắt đầu
         if (
             parsedStartDate.date &&
             parsedDueDate.date &&
@@ -372,7 +450,6 @@ export const createTask = async (req, res) => {
             });
         }
 
-        // Tạo công việc
         const task = await Task.create({
             title: title.trim(),
             description: description.trim(),
@@ -382,17 +459,21 @@ export const createTask = async (req, res) => {
             priority
         });
 
-        // Lấy thông tin người tạo sau khi tạo công việc
-        await task.populate('createdBy', 'fullName email avatarUrl');
+        await task.populate(
+            'createdBy',
+            'fullName email avatarUrl'
+        );
 
         return res.status(201).json({
             success: true,
             message: 'Task created successfully',
-            task
+            task,
+            accessRole: 'owner',
+            accessRoles: ['owner']
         });
 
     } catch (error) {
-        console.error('Create task error:', error.message);
+        console.error('Create task error:', error);
 
         return res.status(500).json({
             success: false,
@@ -401,12 +482,14 @@ export const createTask = async (req, res) => {
     }
 };
 
-/* Cập nhật thông tin công việc */
+// ==========================================
+// CẬP NHẬT THÔNG TIN CÔNG VIỆC
+// ==========================================
+
 export const updateTask = async (req, res) => {
     try {
         const taskId = req.params.id;
 
-        // Kiểm tra ID công việc
         if (!mongoose.isValidObjectId(taskId)) {
             return res.status(400).json({
                 success: false,
@@ -414,26 +497,23 @@ export const updateTask = async (req, res) => {
             });
         }
 
-// Owner và Editor được phép chỉnh sửa thông tin công việc
-// Tìm công việc
-const task = await Task.findById(taskId);
+        const task = await Task.findById(taskId);
 
-if (!task) {
-    return res.status(404).json({
-        success: false,
-        message: 'Task not found'
-    });
-}
+        if (!task) {
+            return res.status(404).json({
+                success: false,
+                message: 'Task not found'
+            });
+        }
 
-// Kiểm tra quyền chỉnh sửa
-const role = await getTaskRole(task, req.userId);
+        const access = await getTaskAccess(task, req.userId);
 
-if (!['owner', 'editor'].includes(role)) {
-    return res.status(403).json({
-        success: false,
-        message: 'You do not have permission to edit this task'
-    });
-}
+        if (!access.canEdit) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to edit this task'
+            });
+        }
 
         const {
             title,
@@ -443,7 +523,6 @@ if (!['owner', 'editor'].includes(role)) {
             priority
         } = req.body;
 
-        // Kiểm tra tiêu đề
         if (title !== undefined) {
             if (typeof title !== 'string' || !title.trim()) {
                 return res.status(400).json({
@@ -455,7 +534,6 @@ if (!['owner', 'editor'].includes(role)) {
             task.title = title.trim();
         }
 
-        // Kiểm tra mô tả
         if (description !== undefined) {
             if (typeof description !== 'string') {
                 return res.status(400).json({
@@ -467,11 +545,8 @@ if (!['owner', 'editor'].includes(role)) {
             task.description = description.trim();
         }
 
-        // Kiểm tra mức ưu tiên
         if (priority !== undefined) {
-            const allowedPriority = ['low', 'medium', 'high'];
-
-            if (!allowedPriority.includes(priority)) {
+            if (!['low', 'medium', 'high'].includes(priority)) {
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid task priority'
@@ -481,7 +556,6 @@ if (!['owner', 'editor'].includes(role)) {
             task.priority = priority;
         }
 
-        // Kiểm tra ngày bắt đầu và ngày hết hạn
         const parseDate = (value, currentDate) => {
             if (value === undefined) {
                 return { valid: true, date: currentDate };
@@ -517,7 +591,6 @@ if (!['owner', 'editor'].includes(role)) {
             });
         }
 
-        // Ngày hết hạn không được trước ngày bắt đầu
         if (
             parsedStartDate.date &&
             parsedDueDate.date &&
@@ -532,22 +605,22 @@ if (!['owner', 'editor'].includes(role)) {
         task.startDate = parsedStartDate.date;
         task.dueDate = parsedDueDate.date;
 
-        // Lưu thay đổi
         await task.save();
 
         await task.populate('createdBy', 'fullName email avatarUrl');
         await task.populate('assigneeIds', 'fullName email avatarUrl');
         await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
 
-return res.status(200).json({
-    success: true,
-    message: 'Task updated successfully',
-    task,
-    accessRole: role
-});
+        return res.status(200).json({
+            success: true,
+            message: 'Task updated successfully',
+            task,
+            accessRole: access.accessRole,
+            accessRoles: access.roles
+        });
 
     } catch (error) {
-        console.error('Update task error:', error.message);
+        console.error('Update task error:', error);
 
         return res.status(500).json({
             success: false,
@@ -556,12 +629,14 @@ return res.status(200).json({
     }
 };
 
-// Xóa công việc
+// ==========================================
+// XÓA CÔNG VIỆC
+// ==========================================
+
 export const deleteTask = async (req, res) => {
     try {
         const taskId = req.params.id;
 
-        // Kiểm tra ID công việc
         if (!mongoose.isValidObjectId(taskId)) {
             return res.status(400).json({
                 success: false,
@@ -569,7 +644,7 @@ export const deleteTask = async (req, res) => {
             });
         }
 
-        // Chỉ người tạo công việc mới được xóa
+        // Chỉ Owner được xóa công việc
         const task = await Task.findOne({
             _id: taskId,
             createdBy: req.userId
@@ -582,13 +657,11 @@ export const deleteTask = async (req, res) => {
             });
         }
 
-// Xóa công việc
-await task.deleteOne();
+        await task.deleteOne();
 
-// Xóa toàn bộ quyền chia sẻ liên quan
-await TaskShare.deleteMany({
-    taskId: task._id
-});
+        await TaskShare.deleteMany({
+            taskId: task._id
+        });
 
         return res.status(200).json({
             success: true,
@@ -596,7 +669,7 @@ await TaskShare.deleteMany({
         });
 
     } catch (error) {
-        console.error('Delete task error:', error.message);
+        console.error('Delete task error:', error);
 
         return res.status(500).json({
             success: false,
@@ -605,13 +678,15 @@ await TaskShare.deleteMany({
     }
 };
 
-// Cập nhật trạng thái công việc
+// ==========================================
+// CẬP NHẬT TRẠNG THÁI CÔNG VIỆC
+// ==========================================
+
 export const updateTaskStatus = async (req, res) => {
     try {
         const taskId = req.params.id;
         const { status } = req.body;
 
-        // Kiểm tra ID công việc
         if (!mongoose.isValidObjectId(taskId)) {
             return res.status(400).json({
                 success: false,
@@ -619,16 +694,9 @@ export const updateTaskStatus = async (req, res) => {
             });
         }
 
-        // Kiểm tra trạng thái hợp lệ
-        const allowedStatus = [
-            'todo',
-            'in_progress',
-            'completed'
-        ];
-
         if (
             typeof status !== 'string' ||
-            !allowedStatus.includes(status)
+            !['todo', 'in_progress', 'completed'].includes(status)
         ) {
             return res.status(400).json({
                 success: false,
@@ -636,94 +704,41 @@ export const updateTaskStatus = async (req, res) => {
             });
         }
 
-// Tìm công việc
-const task = await Task.findById(taskId);
+        const task = await Task.findById(taskId);
 
-if (!task) {
-    return res.status(404).json({
-        success: false,
-        message: 'Task not found'
-    });
-}
+        if (!task) {
+            return res.status(404).json({
+                success: false,
+                message: 'Task not found'
+            });
+        }
 
-// Kiểm tra quyền cập nhật trạng thái
-const role = await getTaskRole(task, req.userId);
+        const access = await getTaskAccess(task, req.userId);
 
-if (!['owner', 'assignee', 'editor'].includes(role)) {
-    return res.status(403).json({
-        success: false,
-        message: 'You do not have permission to update task status'
-    });
-}
+        if (!access.canUpdateStatus) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to update task status'
+            });
+        }
 
-        // Lưu trạng thái trước khi cập nhật
         const previousStatus = task.status;
 
-        // Cập nhật trạng thái
         task.status = status;
         await task.save();
 
-
-// Chỉ tạo thông báo khi trạng thái thực sự thay đổi
-if (previousStatus !== status) {
-    try {
-        // Lấy danh sách người được chia sẻ công việc
-        const shares = await TaskShare.find({
-            taskId: task._id
-        }).select('userId');
-
-        // Tập hợp Owner, Assignee và người được chia sẻ
-        const recipientIds = [
-            task.createdBy,
-            ...(task.assigneeIds || []),
-            ...shares.map(share => share.userId)
-        ]
-            .filter(Boolean)
-            .map(id => String(id));
-
-        // Loại bỏ ID trùng lặp và người thực hiện thay đổi
-        const uniqueRecipientIds = [
-            ...new Set(recipientIds)
-        ].filter(id => id !== String(req.userId));
-
-        // Chuyển trạng thái thành nội dung dễ đọc
-        const statusLabels = {
-            todo: 'Chưa bắt đầu',
-            in_progress: 'Đang thực hiện',
-            completed: 'Đã hoàn thành'
-        };
-
-        // Tạo thông báo cho các thành viên liên quan
-        if (uniqueRecipientIds.length > 0) {
-            const notificationDocs = uniqueRecipientIds.map(userId => ({
-                userId,
-                actorId: req.userId,
-                taskId: task._id,
-                type: 'task_status_changed',
-                title: 'Trạng thái công việc đã thay đổi',
-                message: `Công việc "${task.title}" đã thay đổi từ "${statusLabels[previousStatus]}" sang "${statusLabels[status]}".`
-            }));
-
-            await Notification.insertMany(notificationDocs);
-        }
-    } catch (notificationError) {
-        console.error(
-            'Create task status notification error:',
-            notificationError.message
-        );
-    }
-}
-
-
-        // Gửi Email khi trạng thái công việc thực sự thay đổi
+        // Chỉ thông báo và gửi email khi trạng thái thực sự thay đổi
         if (previousStatus !== status) {
+            const statusMessage =
+                `Công việc "${task.title}" đã thay đổi từ ` +
+                `"${getStatusLabel(previousStatus)}" sang ` +
+                `"${getStatusLabel(status)}".`;
+
             try {
-                // Lấy danh sách người được chia sẻ
                 const shares = await TaskShare.find({
                     taskId: task._id
                 }).select('userId');
 
-                // Tập hợp Owner, Assignee và người được chia sẻ
                 const recipientIds = [
                     task.createdBy,
                     ...(task.assigneeIds || []),
@@ -732,82 +747,99 @@ if (previousStatus !== status) {
                     .filter(Boolean)
                     .map(id => String(id));
 
-                // Loại bỏ ID trùng và người thực hiện thay đổi
                 const uniqueRecipientIds = [
                     ...new Set(recipientIds)
                 ].filter(id => id !== String(req.userId));
 
                 if (uniqueRecipientIds.length > 0) {
-                    // Lấy thông tin người nhận Email
-                    const recipients = await User.find({
-                        _id: { $in: uniqueRecipientIds }
-                    }).select('_id fullName email');
-
-                    const statusLabels = {
-                        todo: 'Chưa bắt đầu',
-                        in_progress: 'Đang thực hiện',
-                        completed: 'Đã hoàn thành'
-                    };
-
-                    const actorName = req.user?.fullName || 'Thành viên';
-
-                    // Gửi Email cho từng thành viên liên quan
-                    for (const recipient of recipients) {
-                        if (!recipient.email) {
-                            continue;
-                        }
-
-                        const emailResult = await sendNotificationEmail({
-                            recipientEmail: recipient.email,
-                            recipientUserId: recipient._id,
+                    const notificationDocs = uniqueRecipientIds.map(
+                        userId => ({
+                            userId,
+                            actorId: req.userId,
                             taskId: task._id,
-                            eventType: 'task_status_changed',
+                            type: 'task_status_changed',
+                            title: 'Trạng thái công việc đã thay đổi',
+                            message: statusMessage
+                        })
+                    );
 
-                            subject: `Trạng thái công việc đã thay đổi: ${task.title}`,
+                    try {
+                        await Notification.insertMany(notificationDocs);
+                    } catch (notificationError) {
+                        console.error(
+                            'Create status notifications error:',
+                            notificationError.message
+                        );
+                    }
 
-                            text: `Xin chào ${recipient.fullName || 'bạn'},
+                    try {
+                        const recipients = await User.find({
+                            _id: { $in: uniqueRecipientIds }
+                        }).select('_id fullName email');
+
+                        const actorName =
+                            req.user?.fullName || 'Thành viên';
+
+                        for (const recipient of recipients) {
+                            if (!recipient.email) continue;
+
+                            const emailResult =
+                                await sendNotificationEmail({
+                                    recipientEmail: recipient.email,
+                                    recipientUserId: recipient._id,
+                                    taskId: task._id,
+                                    eventType: 'task_status_changed',
+                                    subject:
+                                        `Trạng thái công việc đã thay đổi: ${task.title}`,
+                                    text: `Xin chào ${recipient.fullName || 'bạn'},
 
 ${actorName} vừa thay đổi trạng thái công việc "${task.title}".
 
-Trạng thái trước đó: ${statusLabels[previousStatus]}.
-Trạng thái hiện tại: ${statusLabels[status]}.
+Trạng thái trước đó: ${getStatusLabel(previousStatus)}.
+Trạng thái hiện tại: ${getStatusLabel(status)}.
 
 Hãy đăng nhập vào Task Manager để theo dõi công việc.
 
 Trân trọng,
 Task Manager`
-                        });
+                                });
 
-                        if (!emailResult.success) {
-                            console.error(
-                                `Task status email failed for ${recipient.email}:`,
-                                emailResult.errorMessage
-                            );
+                            if (!emailResult.success) {
+                                console.error(
+                                    `Task status email failed for ${recipient.email}:`,
+                                    emailResult.errorMessage
+                                );
+                            }
                         }
+                    } catch (emailError) {
+                        console.error(
+                            'Task status email processing error:',
+                            emailError.message
+                        );
                     }
                 }
-            } catch (emailError) {
+            } catch (recipientError) {
                 console.error(
-                    'Task status email processing error:',
-                    emailError.message
+                    'Get task notification recipients error:',
+                    recipientError.message
                 );
             }
         }
 
-        // Lấy thông tin liên quan
         await task.populate('createdBy', 'fullName email avatarUrl');
         await task.populate('assigneeIds', 'fullName email avatarUrl');
         await task.populate('primaryAssigneeId', 'fullName email avatarUrl');
 
-return res.status(200).json({
-    success: true,
-    message: 'Task status updated successfully',
-    task,
-    accessRole: role
-});
+        return res.status(200).json({
+            success: true,
+            message: 'Task status updated successfully',
+            task,
+            accessRole: access.accessRole,
+            accessRoles: access.roles
+        });
 
     } catch (error) {
-        console.error('Update task status error:', error.message);
+        console.error('Update task status error:', error);
 
         return res.status(500).json({
             success: false,

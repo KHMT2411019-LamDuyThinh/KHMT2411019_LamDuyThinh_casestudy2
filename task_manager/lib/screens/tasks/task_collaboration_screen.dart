@@ -223,28 +223,14 @@ class _TaskCollaborationScreenState
       return;
     }
 
-    // Không cho lưu nếu thành viên được chọn phân công đang có quyền chia sẻ.
-    final sharedUserIds = _shares
-        .map((share) => _memberId(share['userId']))
-        .where((id) => id.isNotEmpty)
-        .toSet();
+    // Case Study 2 cho phép một thành viên vừa là Assignee vừa là Shared.
+    // Hai vai trò được lưu và thu hồi độc lập ở backend.
 
-    if (_selectedAssigneeIds.any(sharedUserIds.contains)) {
-      _showMessage(
-        'Một thành viên đang có quyền chia sẻ. Hãy thu hồi quyền chia sẻ trước khi phân công.',
-        error: true,
-      );
-      return;
-    }
-
-    // Không lưu phân công cho người đang được chọn ở phần chia sẻ.
-    if (_selectedShareMember != null &&
-        _selectedAssigneeIds.contains(_memberId(_selectedShareMember))) {
-      _showMessage(
-        'Một thành viên không thể vừa được phân công vừa được chia sẻ.',
-        error: true,
-      );
-      return;
+    // Nếu còn người được giao nhưng chưa có người phụ trách chính hợp lệ,
+    // tự chọn người đầu tiên để bảo đảm công việc có người phụ trách chính.
+    if (_selectedAssigneeIds.isNotEmpty &&
+        !_selectedAssigneeIds.contains(_primaryAssigneeId)) {
+      _primaryAssigneeId = _selectedAssigneeIds.first;
     }
 
     setState(() {
@@ -287,20 +273,11 @@ class _TaskCollaborationScreenState
 
     final userId = _memberId(_selectedShareMember);
 
-    final isAssigned =
-        _task?.assignees.any((user) => user.id == userId) ?? false;
-    final isSelectedForAssignment = _selectedAssigneeIds.contains(userId);
+    // Một Assignee vẫn có thể được chia sẻ thêm quyền viewer/editor.
+    // Chỉ ngăn tạo bản ghi chia sẻ trùng lặp.
     final isAlreadyShared = _shares.any(
           (share) => _memberId(share['userId']) == userId,
     );
-
-    if (isAssigned || isSelectedForAssignment) {
-      _showMessage(
-        'Thành viên này đang được phân công. Hãy gỡ phân công và lưu trước khi chia sẻ.',
-        error: true,
-      );
-      return;
-    }
 
     if (isAlreadyShared) {
       _showMessage('Thành viên này đã được chia sẻ công việc.', error: true);
@@ -467,18 +444,18 @@ class _TaskCollaborationScreenState
                       (share) => _memberId(share['userId']) == id,
                 );
 
-                final cannotShare = isAssigned || isAlreadyShared;
-
                 return ListTile(
                   leading: const CircleAvatar(
                     child: Icon(Icons.person_outline),
                   ),
                   title: Text(_memberName(member)),
                   subtitle: Text(
-                    isAssigned
-                        ? 'Thành viên đã được phân công'
-                        : isAlreadyShared
-                        ? 'Thành viên đã được chia sẻ'
+                    isAlreadyShared
+                        ? (isAssigned
+                        ? 'Đã được phân công và chia sẻ'
+                        : 'Thành viên đã được chia sẻ')
+                        : isAssigned
+                        ? 'Đã được phân công — có thể chia sẻ thêm'
                         : member['email']?.toString() ?? '',
                   ),
                   trailing: isSelected
@@ -486,8 +463,10 @@ class _TaskCollaborationScreenState
                     Icons.check_circle,
                     color: Colors.green,
                   )
+                      : isAlreadyShared
+                      ? const Icon(Icons.check_circle_outline)
                       : const Icon(Icons.add_circle_outline),
-                  onTap: cannotShare
+                  onTap: isAlreadyShared
                       ? null
                       : () {
                     setState(() {
@@ -562,17 +541,16 @@ class _TaskCollaborationScreenState
                 final isSelected =
                 _selectedAssigneeIds.contains(id);
 
-                // Không cho phân công người đang được chia sẻ.
+                // Người đã được chia sẻ vẫn có thể được giao việc.
                 final isAlreadyShared = _shares.any(
                       (share) => _memberId(share['userId']) == id,
                 );
                 final isSelectedForSharing =
                     _selectedShareMember != null &&
                         _memberId(_selectedShareMember) == id;
-                final cannotAssign = isAlreadyShared || isSelectedForSharing;
 
                 return CheckboxListTile(
-                  value: cannotAssign ? false : isSelected,
+                  value: isSelected,
                   controlAffinity: ListTileControlAffinity.leading,
                   secondary: const CircleAvatar(
                     child: Icon(Icons.person_outline),
@@ -580,23 +558,24 @@ class _TaskCollaborationScreenState
                   title: Text(_memberName(member)),
                   subtitle: Text(
                     isAlreadyShared
-                        ? 'Thành viên đang có quyền chia sẻ'
+                        ? 'Đã được chia sẻ — vẫn có thể giao việc'
                         : isSelectedForSharing
-                        ? 'Thành viên đang được chọn để chia sẻ'
+                        ? 'Đang được chọn chia sẻ — vẫn có thể giao việc'
                         : member['email']?.toString() ?? '',
                   ),
-                  onChanged: cannotAssign
-                      ? null
-                      : (value) {
+                  onChanged: (value) {
                     setState(() {
                       if (value == true) {
                         _assignmentCandidates[id] = member;
                         _selectedAssigneeIds.add(id);
+                        _primaryAssigneeId ??= id;
                       } else {
                         _selectedAssigneeIds.remove(id);
 
                         if (_primaryAssigneeId == id) {
-                          _primaryAssigneeId = null;
+                          _primaryAssigneeId = _selectedAssigneeIds.isNotEmpty
+                              ? _selectedAssigneeIds.first
+                              : null;
                         }
                       }
                     });
@@ -648,7 +627,9 @@ class _TaskCollaborationScreenState
                     _selectedAssigneeIds.remove(id);
 
                     if (_primaryAssigneeId == id) {
-                      _primaryAssigneeId = null;
+                      _primaryAssigneeId = _selectedAssigneeIds.isNotEmpty
+                          ? _selectedAssigneeIds.first
+                          : null;
                     }
                   });
                 },
@@ -713,7 +694,7 @@ class _TaskCollaborationScreenState
             : <String, dynamic>{};
 
         final name = _memberName(userMap);
-        final role = share['role']?.toString() ?? 'viewer';
+        final role = (share['permission'] ?? share['role'])?.toString() ?? 'viewer';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 10),

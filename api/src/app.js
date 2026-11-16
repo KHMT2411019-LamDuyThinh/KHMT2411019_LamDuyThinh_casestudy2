@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 
@@ -11,7 +12,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Kiểm tra trạng thái API
+// ==========================================
+// KIỂM TRA TRẠNG THÁI API
+// ==========================================
+
 app.get('/api/health', (req, res) => {
     res.status(200).json({
         success: true,
@@ -19,15 +23,34 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// API xác thực tài khoản
+// ==========================================
+// NHÓM A: XÁC THỰC
+// ==========================================
+
 app.use('/api/auth', authRoutes);
 
-// API quản lý và đọc công việc
+// ==========================================
+// NHÓM C: NGƯỜI DÙNG, GIAO VIỆC, CHIA SẺ
+// ==========================================
+
+app.use('/api/users', userRoutes);
+
+// ==========================================
+// NHÓM B VÀ C: QUẢN LÝ CÔNG VIỆC
+// ==========================================
+
 app.use('/api/tasks', taskRoutes);
+
+// ==========================================
+// NHÓM D: THÔNG BÁO
+// ==========================================
 
 app.use('/api/notifications', notificationRoutes);
 
-// Xử lý đường dẫn không tồn tại
+// ==========================================
+// XỬ LÝ ĐƯỜNG DẪN KHÔNG TỒN TẠI
+// ==========================================
+
 app.use((req, res) => {
     res.status(404).json({
         success: false,
